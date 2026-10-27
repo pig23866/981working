@@ -71,7 +71,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           <button
             type="button"
             onClick={goToToday}
-            className="px-3 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+            className="px-3 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg btn-press cursor-pointer"
           >
             返回今天
           </button>
@@ -79,7 +79,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             <button
               type="button"
               onClick={prevMonth}
-              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded cursor-pointer"
+              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded btn-press cursor-pointer"
               title="上個月"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -87,7 +87,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             <button
               type="button"
               onClick={nextMonth}
-              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded cursor-pointer"
+              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded btn-press cursor-pointer"
               title="下個月"
             >
               <ChevronRight className="w-4 h-4" />
@@ -168,7 +168,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     <div
                       key={asg.id}
                       onClick={() => onSelectAssignment(asg)}
-                      className={`px-1.5 py-0.5 rounded text-[11px] font-medium truncate cursor-pointer transition-all border ${
+                      className={`px-1.5 py-0.5 rounded text-[11px] font-medium truncate cursor-pointer btn-press border ${
                         isDone
                           ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 line-through'
                           : isOverdue

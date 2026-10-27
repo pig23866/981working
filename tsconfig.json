@@ -22,6 +22,7 @@
     },
     "allowImportingTsExtensions": true,
     "types": ["vite/client", "vite-plugin-pwa/client"],
+    "resolveJsonModule": true,
     "noEmit": true
   }
 }

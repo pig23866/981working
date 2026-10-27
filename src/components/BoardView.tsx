@@ -1,5 +1,5 @@
 import React from 'react';
-import { Assignment, Subject, AssignmentStatus } from '../types';
+import { Assignment, Subject, AssignmentStatus, AssignmentProgress, UserRole } from '../types';
 import { STATUS_LABELS } from '../lib/constants';
 import { AssignmentCard } from './AssignmentCard';
 import { Plus } from 'lucide-react';
@@ -7,6 +7,11 @@ import { Plus } from 'lucide-react';
 interface BoardViewProps {
   assignments: Assignment[];
   subjects: Subject[];
+  userProgressMap?: Map<string, AssignmentProgress>;
+  currentUserRole?: UserRole;
+  completedCountMap?: Record<string, number>;
+  totalStudentsCount?: number;
+  onOpenProgressModal?: (assignment: Assignment) => void;
   onEdit: (assignment: Assignment) => void;
   onDelete: (id: string) => void;
   onStatusChange: (id: string, newStatus: AssignmentStatus) => void;
@@ -24,6 +29,11 @@ const COLUMNS: { status: AssignmentStatus; label: string; headerBg: string; bord
 export const BoardView: React.FC<BoardViewProps> = ({
   assignments,
   subjects,
+  userProgressMap,
+  currentUserRole,
+  completedCountMap,
+  totalStudentsCount,
+  onOpenProgressModal,
   onEdit,
   onDelete,
   onStatusChange,
@@ -35,7 +45,10 @@ export const BoardView: React.FC<BoardViewProps> = ({
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
       {COLUMNS.map((col) => {
-        const colAssignments = assignments.filter((a) => a.status === col.status);
+        const colAssignments = assignments.filter((a) => {
+          const personalStatus = userProgressMap?.get(a.id)?.status || 'todo';
+          return personalStatus === col.status;
+        });
 
         return (
           <div
@@ -76,6 +89,11 @@ export const BoardView: React.FC<BoardViewProps> = ({
                     key={asg.id}
                     assignment={asg}
                     subject={subjectMap.get(asg.subjectId)}
+                    userProgress={userProgressMap?.get(asg.id)}
+                    currentUserRole={currentUserRole}
+                    completedCount={completedCountMap ? completedCountMap[asg.id] : undefined}
+                    totalStudentsCount={totalStudentsCount}
+                    onOpenProgressModal={onOpenProgressModal ? () => onOpenProgressModal(asg) : undefined}
                     onEdit={onEdit}
                     onDelete={onDelete}
                     onStatusChange={onStatusChange}

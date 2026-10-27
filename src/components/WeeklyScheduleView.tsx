@@ -90,7 +90,7 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
   };
 
   const handleReset = () => {
-    if (window.confirm('確定恢復官校正98期第1教授班(資訊)預設課表？')) {
+    if (window.confirm('確定恢復預設標準課表？')) {
       const reset = resetStoredSchedule();
       onSaveCourses(reset);
     }
@@ -118,7 +118,7 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
           <button
             type="button"
             onClick={handleReset}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700 rounded-xl btn-press cursor-pointer border border-slate-200 dark:border-slate-700"
           >
             <RotateCcw className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
             <span>恢復預設課表</span>
@@ -327,8 +327,8 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
 
         {/* Inline Edit modal if active */}
         {isEditing && selectedCourse && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-            <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800">
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs modal-backdrop">
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 modal-panel">
               <h4 className="text-base font-bold text-slate-900 dark:text-white mb-3">編輯課堂資訊</h4>
               <form onSubmit={handleSaveEdit} className="space-y-3 text-xs">
                 <div>
@@ -365,13 +365,13 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsEditing(false)}
-                    className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
+                    className="px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl btn-press cursor-pointer"
                   >
                     取消
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl cursor-pointer"
+                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl btn-press cursor-pointer"
                   >
                     儲存更新
                   </button>

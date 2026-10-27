@@ -2,6 +2,13 @@ import bcrypt from 'bcryptjs';
 import { AppUser, SessionUser, UserRole } from '../types';
 import { loadWithIntegrity, saveWithIntegrity } from './integrity';
 import { logAuditEvent } from './auditLogger';
+import {
+  saveUserToCloud,
+  deleteUserFromCloud,
+  subscribeToUsers,
+  seedInitialUsersIfEmpty,
+  fetchUsersFromCloud,
+} from './firebase';
 
 const USERS_STORAGE_KEY = 'hw_auth_users_v2';
 const SESSION_STORAGE_KEY = 'hw_auth_session_v2';
@@ -24,26 +31,50 @@ export function verifyPassword(plainText: string, hash: string): boolean {
   }
 }
 
-// Initial seed users with pre-hashed bcrypt values
-// User: 98210 / Aa98210
-// Admin: Admin / Aa123456789
-function getInitialSeedUsers(): AppUser[] {
-  return [
-    {
-      username: '98210',
-      displayName: '陸官正98期學員 (98210)',
-      role: 'user',
-      passwordHash: hashPassword('Aa98210'),
-      createdAt: '2026-10-19T00:00:00.000Z',
-    },
-    {
-      username: 'Admin',
-      displayName: '系統管理員 (Admin)',
-      role: 'admin',
-      passwordHash: hashPassword('Aa123456789'),
-      createdAt: '2026-10-19T00:00:00.000Z',
-    },
-  ];
+// Official Student List (學號與學生姓名，密碼預設為 Aa學號)
+export const OFFICIAL_STUDENT_SEEDS: { username: string; displayName: string }[] = [
+  { username: '98005', displayName: '余品馬吉' },
+  { username: '98015', displayName: '丁學澤' },
+  { username: '98043', displayName: '陳威亦' },
+  { username: '98058', displayName: '翟益洋' },
+  { username: '98066', displayName: '賴宇翔' },
+  { username: '98068', displayName: '羅千驊' },
+  { username: '98102', displayName: '莊侑憲' },
+  { username: '98132', displayName: '鍾禮喧' },
+  { username: '98156', displayName: '劉清鋐' },
+  { username: '98184', displayName: '謝瑋澤' },
+  { username: '98210', displayName: '葉恩齊' },
+  { username: '98267', displayName: '陳慧珊' },
+  { username: '98271', displayName: '江昕娣' },
+  { username: '98402', displayName: '謝昀芳' },
+];
+
+let cachedSeedUsers: AppUser[] | null = null;
+
+// Initial seed users with pre-hashed bcrypt values (含 14 位官方學員與系統管理員)
+export function getInitialSeedUsers(): AppUser[] {
+  if (cachedSeedUsers) {
+    return cachedSeedUsers;
+  }
+
+  const studentUsers: AppUser[] = OFFICIAL_STUDENT_SEEDS.map((s) => ({
+    username: s.username,
+    displayName: s.displayName,
+    role: 'user',
+    passwordHash: hashPassword(`Aa${s.username}`),
+    createdAt: '2026-10-19T00:00:00.000Z',
+  }));
+
+  const adminUser: AppUser = {
+    username: 'Admin',
+    displayName: '系統管理員 (Admin)',
+    role: 'admin',
+    passwordHash: hashPassword('Aa123456789'),
+    createdAt: '2026-10-19T00:00:00.000Z',
+  };
+
+  cachedSeedUsers = [adminUser, ...studentUsers];
+  return cachedSeedUsers;
 }
 
 // Load all users from storage with Hash integrity protection
@@ -64,18 +95,239 @@ export function loadUsers(): AppUser[] {
     }
   );
 
-  // Ensure default users exist
+  // Ensure all seed users exist, and directly replace/update matching/similar accounts
   let modified = false;
   for (const initUser of initial) {
-    if (!parsed.some((u) => u.username.toLowerCase() === initUser.username.toLowerCase())) {
+    const existingIndex = parsed.findIndex(
+      (u) => u.username.toLowerCase() === initUser.username.toLowerCase()
+    );
+
+    if (existingIndex === -1) {
+      // 尚未存在，自動新增
       parsed.push(initUser);
       modified = true;
+    } else {
+      // 已存在雷同帳號：直接替代姓名與初始密碼 (例如 98210 替代為 葉恩齊)
+      const current = parsed[existingIndex];
+      if (current.displayName !== initUser.displayName) {
+        parsed[existingIndex] = {
+          ...current,
+          displayName: initUser.displayName,
+          passwordHash: initUser.passwordHash,
+        };
+        modified = true;
+      }
     }
   }
+
   if (modified) {
     saveUsers(parsed);
   }
   return parsed;
+}
+
+/**
+ * 雙向同步雲端帳號至本地快取
+ */
+export function syncUsersFromCloud(cloudUsers: AppUser[]): void {
+  if (!cloudUsers || cloudUsers.length === 0) return;
+  const localUsers = loadUsers();
+  const initialSeeds = getInitialSeedUsers();
+  const map = new Map<string, AppUser>();
+
+  // 1. 保留預設必要種子帳號
+  initialSeeds.forEach((u) => map.set(u.username.toLowerCase(), u));
+
+  // 2. 載入本地既有帳號
+  localUsers.forEach((u) => map.set(u.username.toLowerCase(), u));
+
+  // 3. 雲端最新狀態，若有同名官方學員則確保使用正確的官方姓名
+  cloudUsers.forEach((u) => {
+    const seed = initialSeeds.find(
+      (s) => s.username.toLowerCase() === u.username.toLowerCase()
+    );
+    if (seed && u.displayName !== seed.displayName) {
+      map.set(u.username.toLowerCase(), {
+        ...u,
+        displayName: seed.displayName,
+      });
+    } else {
+      map.set(u.username.toLowerCase(), u);
+    }
+  });
+
+  saveUsers(Array.from(map.values()));
+}
+
+/**
+ * 確保所有 14 位學員與管理員帳號皆已同步至 Cloud Firestore
+ */
+export async function ensureSeedUsersSyncedToCloud(): Promise<void> {
+  try {
+    const seeds = getInitialSeedUsers();
+    for (const u of seeds) {
+      await saveUserToCloud(u);
+    }
+  } catch (err) {
+    console.warn('Notice ensuring seed users in cloud:', err);
+}
+}
+
+/**
+ * 完整雙向同步：從雲端拉取最新帳號，並將本地獨有的帳號補充推送到雲端
+ */
+export async function syncUsersWithCloud(externalCloudUsers?: AppUser[]): Promise<{
+  totalUsers: number;
+  uploadedToCloud: number;
+}> {
+  try {
+    const cloudUsers = externalCloudUsers || (await fetchUsersFromCloud());
+    const localUsers = loadUsers();
+    const map = new Map<string, AppUser>();
+
+    // 1. 預設種子帳號
+    getInitialSeedUsers().forEach((u) => map.set(u.username.toLowerCase(), u));
+    // 2. 本機帳號
+    localUsers.forEach((u) => map.set(u.username.toLowerCase(), u));
+    // 3. 雲端帳號
+    if (cloudUsers && cloudUsers.length > 0) {
+      cloudUsers.forEach((u) => map.set(u.username.toLowerCase(), u));
+    }
+
+    const merged = Array.from(map.values());
+    saveUsers(merged);
+
+    // 4. 若本機有但雲端資料庫尚未存在的帳號，自動補上傳
+    let uploadedToCloud = 0;
+    if (cloudUsers) {
+      const cloudUsernames = new Set(cloudUsers.map((u) => u.username.toLowerCase()));
+      for (const user of merged) {
+        if (!cloudUsernames.has(user.username.toLowerCase())) {
+          await saveUserToCloud(user);
+          uploadedToCloud++;
+        }
+      }
+    }
+
+    return { totalUsers: merged.length, uploadedToCloud };
+  } catch (err) {
+    console.error('Failed to sync users bidirectionally with cloud:', err);
+    return { totalUsers: loadUsers().length, uploadedToCloud: 0 };
+  }
+}
+
+/**
+ * 強制將目前本機所有帳號一次性上傳至 Cloud Firestore 資料庫備份
+ */
+export async function pushAllLocalUsersToCloud(): Promise<{ uploaded: number; failed: number }> {
+  const users = loadUsers();
+  let uploaded = 0;
+  let failed = 0;
+  for (const u of users) {
+    const ok = await saveUserToCloud(u);
+    if (ok) uploaded++;
+    else failed++;
+  }
+  return { uploaded, failed };
+}
+
+// 系統啟動時自動嘗試雲端同步帳號資料庫 (若為空則種子初始化)
+(async () => {
+  try {
+    const cloudUsers = await fetchUsersFromCloud();
+    if (cloudUsers && cloudUsers.length > 0) {
+      syncUsersFromCloud(cloudUsers);
+    } else {
+      await seedInitialUsersIfEmpty(getInitialSeedUsers());
+      // 同步本地既有帳號至雲端
+      await pushAllLocalUsersToCloud();
+    }
+  } catch (err) {
+    console.warn('Startup cloud users synchronization notice:', err);
+  }
+})();
+
+const ATTEMPTS_STORAGE_KEY = 'hw_auth_login_attempts_v2';
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
+interface LoginAttemptRecord {
+  failedCount: number;
+  lockedUntil?: number;
+  lastAttemptAt: number;
+}
+
+function loadLoginAttempts(): Record<string, LoginAttemptRecord> {
+  try {
+    const raw = localStorage.getItem(ATTEMPTS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLoginAttempts(data: Record<string, LoginAttemptRecord>): void {
+  try {
+    localStorage.setItem(ATTEMPTS_STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.error('Failed to save login attempts:', e);
+  }
+}
+
+// Check if an account is currently locked due to brute-force attacks
+export function checkAccountLockout(username: string): { isLocked: boolean; remainingMinutes: number } {
+  const attempts = loadLoginAttempts();
+  const record = attempts[username.toLowerCase()];
+  if (!record || !record.lockedUntil) {
+    return { isLocked: false, remainingMinutes: 0 };
+  }
+
+  const now = Date.now();
+  if (now < record.lockedUntil) {
+    const remainingMinutes = Math.ceil((record.lockedUntil - now) / 60000);
+    return { isLocked: true, remainingMinutes };
+  }
+
+  // Lockout expired, reset count
+  delete attempts[username.toLowerCase()];
+  saveLoginAttempts(attempts);
+  return { isLocked: false, remainingMinutes: 0 };
+}
+
+// Record a failed login attempt
+function recordFailedAttempt(username: string): { isLocked: boolean; remainingAttempts: number; remainingMinutes: number } {
+  const attempts = loadLoginAttempts();
+  const key = username.toLowerCase();
+  const now = Date.now();
+  const current = attempts[key] || { failedCount: 0, lastAttemptAt: now };
+
+  current.failedCount += 1;
+  current.lastAttemptAt = now;
+
+  if (current.failedCount >= MAX_FAILED_ATTEMPTS) {
+    current.lockedUntil = now + LOCKOUT_DURATION_MS;
+    attempts[key] = current;
+    saveLoginAttempts(attempts);
+    return { isLocked: true, remainingAttempts: 0, remainingMinutes: 15 };
+  }
+
+  attempts[key] = current;
+  saveLoginAttempts(attempts);
+  return {
+    isLocked: false,
+    remainingAttempts: MAX_FAILED_ATTEMPTS - current.failedCount,
+    remainingMinutes: 0,
+  };
+}
+
+// Reset failed login attempts on successful login
+function resetFailedAttempts(username: string): void {
+  const attempts = loadLoginAttempts();
+  const key = username.toLowerCase();
+  if (attempts[key]) {
+    delete attempts[key];
+    saveLoginAttempts(attempts);
+  }
 }
 
 // Save all users to storage with Hash integrity protection
@@ -83,7 +335,7 @@ export function saveUsers(users: AppUser[]): void {
   saveWithIntegrity(USERS_STORAGE_KEY, users);
 }
 
-// Authenticate user with bcrypt
+// Authenticate user with bcrypt and Brute-Force Defense (防暴力破解引擎)
 export function loginUser(
   usernameInput: string,
   passwordInput: string
@@ -96,12 +348,29 @@ export function loginUser(
     return { success: false, error: '請輸入密碼' };
   }
 
+  // 1. Check Brute-Force Account Lockout
+  const lockout = checkAccountLockout(cleanUsername);
+  if (lockout.isLocked) {
+    logAuditEvent({
+      category: 'security',
+      action: '防暴力破解攔截',
+      level: 'security',
+      actor: { username: cleanUsername, displayName: '未知連線', role: 'user' },
+      details: `帳號「${cleanUsername}」已被安全系統鎖定，已自動阻擋登入請求 (剩餘 ${lockout.remainingMinutes} 分鐘)。`,
+    });
+    return {
+      success: false,
+      error: `該帳號因連續密碼錯誤次數過多已被安全鎖定，請於 ${lockout.remainingMinutes} 分鐘後再試。`,
+    };
+  }
+
   const users = loadUsers();
   const found = users.find(
     (u) => u.username.toLowerCase() === cleanUsername.toLowerCase()
   );
 
   if (!found) {
+    const attempt = recordFailedAttempt(cleanUsername);
     logAuditEvent({
       category: 'auth',
       action: '登入失敗 (帳號不存在)',
@@ -112,21 +381,46 @@ export function loginUser(
     return { success: false, error: '帳號不存在，請確認輸入是否正確' };
   }
 
+  // 2. Verify password with bcrypt
   const isMatch = verifyPassword(passwordInput, found.passwordHash);
   if (!isMatch) {
+    const attempt = recordFailedAttempt(found.username);
+
+    if (attempt.isLocked) {
+      logAuditEvent({
+        category: 'security',
+        action: '觸發防暴力破解鎖定',
+        level: 'security',
+        actor: { username: found.username, displayName: found.displayName, role: found.role },
+        details: `帳號「${found.username}」連續輸入密碼錯誤達到 ${MAX_FAILED_ATTEMPTS} 次，系統已自動鎖定該帳號 15 分鐘。`,
+      });
+      return {
+        success: false,
+        error: `連續密碼錯誤達 ${MAX_FAILED_ATTEMPTS} 次！為防範密碼暴力破解，該帳號已啟動安全保護鎖定 15 分鐘。`,
+      };
+    }
+
     logAuditEvent({
       category: 'auth',
       action: '登入失敗 (密碼錯誤)',
       level: 'warn',
       actor: { username: found.username, displayName: found.displayName, role: found.role },
-      details: `帳號「${found.username}」密碼驗證不符。`,
+      details: `帳號「${found.username}」密碼驗證不符 (剩餘 ${attempt.remainingAttempts} 次機會)。`,
     });
-    return { success: false, error: '密碼錯誤，請重新輸入' };
+
+    return {
+      success: false,
+      error: `密碼錯誤，請重新輸入 (剩餘 ${attempt.remainingAttempts} 次嘗試機會，超過將鎖定帳號 15 分鐘)`,
+    };
   }
+
+  // 3. Login success: clear attempt tracking
+  resetFailedAttempts(found.username);
 
   // Update last login
   found.lastLoginAt = new Date().toISOString();
   saveUsers(users);
+  saveUserToCloud(found).catch(() => {});
 
   const sessionUser: SessionUser = {
     username: found.username,
@@ -181,6 +475,9 @@ export function changePassword(
   user.passwordHash = hashPassword(newPassword);
   users[index] = user;
   saveUsers(users);
+
+  // Sync updated credentials to Cloud Firestore
+  saveUserToCloud(user).catch(() => {});
 
   const actor = operatorActor || {
     username: user.username,
@@ -253,6 +550,9 @@ export function createUser(
   users.push(newUser);
   saveUsers(users);
 
+  // Sync new user to Cloud Firestore
+  saveUserToCloud(newUser).catch(() => {});
+
   logAuditEvent({
     category: 'user',
     action: '建立新帳號',
@@ -293,6 +593,9 @@ export function deleteUser(
   }
 
   saveUsers(remaining);
+
+  // Sync deletion to Cloud Firestore
+  deleteUserFromCloud(target).catch(() => {});
 
   logAuditEvent({
     category: 'user',

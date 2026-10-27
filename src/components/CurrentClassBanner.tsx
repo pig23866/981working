@@ -90,28 +90,23 @@ export const CurrentClassBanner: React.FC<CurrentClassBannerProps> = ({
       <div className="absolute bottom-0 left-1/3 -mb-8 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Top Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-700/80 relative z-10">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center">
-            <Compass className="w-5 h-5 animate-pulse" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 sm:pb-4 mb-3 sm:mb-4 border-b border-slate-700/80 relative z-10">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0">
+            <Compass className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2">
-                課堂即時動態
-              </h2>
-              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                {SCHEDULE_HEADER_INFO.classUnit}
-              </span>
-            </div>
-            <p className="text-xs text-slate-400">
+            <h2 className="text-sm sm:text-base lg:text-lg font-bold tracking-tight text-white flex items-center gap-2">
+              課堂即時動態
+            </h2>
+            <p className="text-[11px] sm:text-xs text-slate-400">
               星期{dayName} • {currentTimeDisplay} • 追蹤現在與下節教室位置
             </p>
           </div>
         </div>
 
         {/* Action Controls & Simulator Toggle */}
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
           {/* Quick Simulation / Preview Mode Toggle */}
           <div className="flex items-center gap-1.5 bg-slate-800/80 border border-slate-700 rounded-xl px-2.5 py-1 text-xs text-slate-300 max-w-full">
             <Clock className="w-3.5 h-3.5 text-blue-400 shrink-0" />
@@ -168,7 +163,7 @@ export const CurrentClassBanner: React.FC<CurrentClassBannerProps> = ({
             id="banner-open-full-schedule-btn"
             type="button"
             onClick={onOpenFullSchedule}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-semibold rounded-xl shadow-xs shadow-blue-500/30 transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-xs shadow-blue-500/30 btn-press cursor-pointer"
           >
             <Calendar className="w-3.5 h-3.5" />
             <span>全週課表</span>
@@ -181,7 +176,7 @@ export const CurrentClassBanner: React.FC<CurrentClassBannerProps> = ({
         {/* CARD 1: 現在甚麼課 在哪裡上課 */}
         <div
           id="current-class-card"
-          className="bg-slate-800/90 hover:bg-slate-800 rounded-2xl p-4 sm:p-5 border border-slate-700/80 shadow-md flex flex-col justify-between transition-all"
+          className="bg-slate-800/90 hover:bg-slate-800 rounded-2xl p-4 sm:p-5 border border-slate-700/80 shadow-md flex flex-col justify-between card-lift"
         >
           <div>
             {/* Top Status Badge */}
@@ -338,7 +333,7 @@ export const CurrentClassBanner: React.FC<CurrentClassBannerProps> = ({
                     currentClass.teacher
                   )
                 }
-                className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300 btn-press cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>登記這門課的新作業</span>
@@ -350,7 +345,7 @@ export const CurrentClassBanner: React.FC<CurrentClassBannerProps> = ({
         {/* CARD 2: 下一節甚麼課 在哪裡上課 */}
         <div
           id="next-class-card"
-          className="bg-slate-800/90 hover:bg-slate-800 rounded-2xl p-4 sm:p-5 border border-slate-700/80 shadow-md flex flex-col justify-between transition-all"
+          className="bg-slate-800/90 hover:bg-slate-800 rounded-2xl p-4 sm:p-5 border border-slate-700/80 shadow-md flex flex-col justify-between card-lift"
         >
           <div>
             {/* Top Status Badge */}
@@ -452,7 +447,7 @@ export const CurrentClassBanner: React.FC<CurrentClassBannerProps> = ({
                     nextClass.teacher
                   )
                 }
-                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 btn-press cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>預記這門課作業</span>

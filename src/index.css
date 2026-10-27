@@ -1,3 +1,79 @@
 @import "tailwindcss";
 
 @variant dark (&:where(.dark, .dark *));
+
+@layer utilities {
+  /* Smooth View Transitions */
+  .view-transition {
+    animation: viewFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* Modal Backdrop Transition */
+  .modal-backdrop {
+    animation: backdropFadeIn 0.15s ease-out forwards;
+  }
+
+  /* Modal Panel Scale & Fade */
+  .modal-panel {
+    animation: modalPanelIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* Interactive Card Lift */
+  .card-lift {
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease-out;
+  }
+  .card-lift:hover {
+    transform: translateY(-2px);
+  }
+
+  /* Pressable button micro-feedback */
+  .btn-press {
+    transition: transform 0.12s ease-out, opacity 0.12s ease-out, background-color 0.15s ease-out;
+  }
+  .btn-press:active {
+    transform: scale(0.96);
+  }
+}
+
+@keyframes viewFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes backdropFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalPanelIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .view-transition,
+  .modal-backdrop,
+  .modal-panel,
+  .card-lift,
+  .btn-press {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}

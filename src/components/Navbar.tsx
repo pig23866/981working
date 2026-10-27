@@ -16,7 +16,8 @@ import {
   Database,
   FileText,
   LayoutGrid,
-  Download,
+  RotateCw,
+  Users,
 } from 'lucide-react';
 import { playChime, requestNotificationPermission } from '../lib/notifications';
 import { SessionUser } from '../types';
@@ -27,6 +28,7 @@ interface NavbarProps {
   onOpenSchedule: () => void;
   onOpenBackupRestore: () => void;
   onOpenAuditLogs?: () => void;
+  onOpenClassOverview?: () => void;
   onClearAllAssignments: () => void;
   notificationGranted: boolean;
   setNotificationGranted: (val: boolean) => void;
@@ -37,6 +39,7 @@ interface NavbarProps {
   onOpenUserManagement?: () => void;
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
+  onManualRefresh?: () => Promise<void>;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -44,6 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSchedule,
   onOpenBackupRestore,
   onOpenAuditLogs,
+  onOpenClassOverview,
   onClearAllAssignments,
   notificationGranted,
   setNotificationGranted,
@@ -53,13 +57,31 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenUserManagement,
   isDarkMode,
   onToggleDarkMode,
+  onManualRefresh,
 }) => {
   const [currentClock, setCurrentClock] = useState('');
   const [showFeaturesMenu, setShowFeaturesMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const featuresMenuRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  const handleRefresh = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      if (onManualRefresh) {
+        await onManualRefresh();
+      }
+    } catch (err) {
+      console.error('Refresh failed:', err);
+    } finally {
+      setTimeout(() => {
+        setIsSyncing(false);
+      }, 600);
+    }
+  };
 
   useEffect(() => {
     const updateTime = () => {
@@ -113,20 +135,20 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 shadow-2xs transition-colors duration-200">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-3 sm:gap-6">
-        {/* Adjusted Brand & Title Typography */}
-        <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
-          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-indigo-700 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/20 ring-1 ring-black/5 dark:ring-white/10">
-            <BookMarked className="w-5 h-5 sm:w-6 sm:h-6" />
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
+        {/* Brand & Title Typography - Cleaned up without class unit text */}
+        <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-indigo-700 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/20 ring-1 ring-black/5 dark:ring-white/10">
+            <BookMarked className="w-5 h-5 sm:w-5.5 sm:h-5.5" />
           </div>
           <div className="min-w-0 flex flex-col justify-center">
-            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-              <h1 className="text-base sm:text-lg lg:text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <h1 className="text-sm xs:text-base sm:text-lg lg:text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none truncate">
                 作業統整管理系統
               </h1>
               {currentUser && (
                 <span
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded-lg border leading-tight shrink-0 ${
+                  className={`hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-lg border leading-tight shrink-0 ${
                     isAdmin
                       ? 'bg-purple-50 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border-purple-200/80 dark:border-purple-800'
                       : 'bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border-blue-200/80 dark:border-blue-800'
@@ -137,29 +159,45 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 mt-1 text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium truncate">
-              <span className="text-slate-700 dark:text-slate-300 font-semibold truncate">
-                正98期第1教授班 (資訊)
-              </span>
-              <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0" />
-              <span className="font-mono text-[11px] hidden xs:inline shrink-0">
-                {currentClock}
-              </span>
+            <div className="hidden sm:flex items-center gap-2 mt-1 text-[11px] text-slate-400 dark:text-slate-500 font-mono">
+              <span>{currentClock}</span>
             </div>
           </div>
         </div>
 
-        {/* Action Controls - Streamlined with Dropdown Menu */}
-        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+        {/* Action Controls - Mobile-friendly & Streamlined */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           {/* Primary Action Button: 新增作業 */}
           <button
             id="navbar-add-assignment-btn"
             type="button"
             onClick={onOpenAddModal}
-            className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs shadow-blue-500/20 transition-all cursor-pointer"
+            className="btn-press inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs shadow-blue-500/20 transition-all cursor-pointer"
           >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>新增作業</span>
+            <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+            <span className="hidden xs:inline">新增作業</span>
+            <span className="xs:hidden">新增</span>
+          </button>
+
+          {/* Quick Cloud Sync / Refresh Button */}
+          <button
+            id="navbar-cloud-sync-btn"
+            type="button"
+            onClick={handleRefresh}
+            disabled={isSyncing}
+            className={`btn-press p-1.5 sm:p-2 rounded-xl border transition-all cursor-pointer shadow-2xs ${
+              isSyncing
+                ? 'bg-blue-50 dark:bg-blue-950/70 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700 ring-2 ring-blue-500/20'
+                : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-700/70'
+            }`}
+            title={isSyncing ? '同步中...' : '重新整理同步'}
+            aria-label="重新整理同步"
+          >
+            <RotateCw
+              className={`w-4 h-4 transition-transform duration-700 ${
+                isSyncing ? 'animate-spin text-blue-600 dark:text-blue-400' : ''
+              }`}
+            />
           </button>
 
           {/* Quick Dark Mode Toggle */}
@@ -167,7 +205,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             id="navbar-dark-mode-toggle"
             type="button"
             onClick={onToggleDarkMode}
-            className="p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/90 text-slate-600 dark:text-amber-400 hover:bg-slate-50 dark:hover:bg-slate-700/70 transition-all cursor-pointer shadow-2xs"
+            className="btn-press p-1.5 sm:p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/90 text-slate-600 dark:text-amber-400 hover:bg-slate-50 dark:hover:bg-slate-700/70 transition-all cursor-pointer shadow-2xs"
             title={isDarkMode ? '切換為淺色模式' : '切換為深色模式'}
             aria-label="切換深淺模式"
           >
@@ -187,30 +225,61 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setShowFeaturesMenu(!showFeaturesMenu);
                 setShowUserMenu(false);
               }}
-              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl border transition-all cursor-pointer ${
+              className={`btn-press inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold rounded-xl border transition-all cursor-pointer ${
                 showFeaturesMenu
                   ? 'bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700 ring-2 ring-blue-500/10'
                   : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/60 shadow-2xs'
               }`}
               title="開啟系統與管理功能選單"
             >
-              <LayoutGrid className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span className="hidden xs:inline">功能選單</span>
+              <LayoutGrid className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 dark:text-blue-400" />
+              <span className="hidden sm:inline">功能選單</span>
+              <span className="sm:hidden text-xs">功能</span>
               <ChevronDown
-                className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                className={`w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400 transition-transform duration-200 ${
                   showFeaturesMenu ? 'rotate-180' : ''
                 }`}
               />
             </button>
 
+            {/* Backdrop for Mobile */}
+            {showFeaturesMenu && (
+              <div
+                className="fixed inset-0 z-40 bg-black/20 backdrop-blur-2xs sm:hidden transition-opacity duration-150"
+                onClick={() => setShowFeaturesMenu(false)}
+              />
+            )}
+
             {/* Dropdown Menu Popover */}
             {showFeaturesMenu && (
-              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 py-2 z-50 animate-in fade-in zoom-in-95 divide-y divide-slate-100 dark:divide-slate-800">
-                {/* Section 1: 課堂與提醒 */}
+              <div className="fixed inset-x-3 top-18 sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 w-auto sm:w-64 max-w-sm ml-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 py-2 z-50 animate-in fade-in zoom-in-95 duration-150 divide-y divide-slate-100 dark:divide-slate-800">
+                {/* Section 1: 課表與功能 */}
                 <div className="py-1">
                   <div className="px-3.5 py-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-                    課堂與排程
+                    常用功能
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowFeaturesMenu(false);
+                      handleRefresh();
+                    }}
+                    className="w-full px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-950/50 hover:text-blue-600 dark:hover:text-blue-400 flex items-center gap-2.5 cursor-pointer text-left transition-colors"
+                  >
+                    <RotateCw
+                      className={`w-4 h-4 text-blue-500 shrink-0 ${
+                        isSyncing ? 'animate-spin' : ''
+                      }`}
+                    />
+                    <div className="flex-1">
+                      <div>重新同步</div>
+                      <div className="text-[10px] text-slate-400 font-normal">
+                        更新最新作業與課表
+                      </div>
+                    </div>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {
@@ -307,6 +376,24 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <Shield className="w-3 h-3" />
                       管理員專區
                     </div>
+                    {onOpenClassOverview && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowFeaturesMenu(false);
+                          onOpenClassOverview();
+                        }}
+                        className="w-full px-3.5 py-2 text-xs font-semibold text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/50 flex items-center gap-2.5 cursor-pointer text-left transition-colors"
+                      >
+                        <Users className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                        <div className="flex-1">
+                          <div>全班作業繳交進度總表</div>
+                          <div className="text-[10px] text-purple-500/80 font-normal">
+                            檢視所有學員與各作業繳交矩陣
+                          </div>
+                        </div>
+                      </button>
+                    )}
                     {onOpenUserManagement && (
                       <button
                         type="button"
@@ -338,7 +425,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <div className="flex-1">
                           <div>系統安全稽核日誌</div>
                           <div className="text-[10px] text-indigo-500/80 font-normal">
-                            查看 Hash 完整性保護紀錄
+                            查看系統安全操作紀錄
                           </div>
                         </div>
                       </button>
@@ -359,7 +446,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   setShowUserMenu(!showUserMenu);
                   setShowFeaturesMenu(false);
                 }}
-                className={`flex items-center gap-2 px-2 sm:px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                className={`btn-press flex items-center gap-1 sm:gap-2 px-1.5 sm:px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
                   isAdmin
                     ? 'bg-purple-50/80 dark:bg-purple-950/50 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-800/80 hover:bg-purple-100'
                     : 'bg-blue-50/80 dark:bg-blue-950/50 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-800/80 hover:bg-blue-100'
@@ -371,17 +458,25 @@ export const Navbar: React.FC<NavbarProps> = ({
                     isAdmin ? 'bg-purple-600' : 'bg-blue-600'
                   }`}
                 >
-                  {isAdmin ? 'A' : '98'}
+                  {isAdmin ? 'A' : (currentUser.displayName ? currentUser.displayName.slice(0, 1) : currentUser.username.slice(0, 2))}
                 </div>
                 <span className="hidden md:inline max-w-[80px] truncate">
-                  {currentUser.username}
+                  {currentUser.displayName || currentUser.username}
                 </span>
-                <ChevronDown className="w-3 h-3 text-slate-400" />
+                <ChevronDown className="w-3 h-3 text-slate-400 hidden xs:inline" />
               </button>
+
+              {/* Backdrop for Mobile */}
+              {showUserMenu && (
+                <div
+                  className="fixed inset-0 z-40 bg-black/20 backdrop-blur-2xs sm:hidden transition-opacity duration-150"
+                  onClick={() => setShowUserMenu(false)}
+                />
+              )}
 
               {/* User Dropdown Popover */}
               {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 py-1.5 z-50 animate-in fade-in zoom-in-95">
+                <div className="fixed inset-x-3 top-18 sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 w-auto sm:w-56 max-w-sm ml-auto bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
                   <div className="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-800">
                     <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
                       {currentUser.displayName}

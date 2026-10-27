@@ -126,3 +126,12 @@ export function formatDateForInput(date: Date = new Date()): string {
   const min = pad(date.getMinutes());
   return `${y}-${m}-${d}T${h}:${min}`;
 }
+
+export function isDatePast(dateStr: string): boolean {
+  try {
+    return new Date(dateStr).getTime() < Date.now();
+  } catch {
+    return false;
+  }
+}
+

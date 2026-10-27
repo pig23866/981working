@@ -236,7 +236,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
   };
 
   const handleResetToDefaultSchedule = () => {
-    if (!window.confirm('確定要還原為軍官學校正98期預設標準課表嗎？此操作將覆蓋現有自訂課表設定。')) {
+    if (!window.confirm('確定要還原為預設標準課表嗎？此操作將覆蓋現有自訂課表設定。')) {
       return;
     }
     const defaults = resetStoredSchedule();
@@ -252,18 +252,18 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
         role: currentUser.role,
       },
       target: 'Schedule',
-      details: '已將課表資料還原為軍校官方預設授課課表。',
+      details: '已將課表資料還原為官方預設授課課表。',
     });
 
     playChime('info');
-    setSuccessMessage('已成功還原為正98期官方標準課表！');
+    setSuccessMessage('已成功還原為官方標準課表！');
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs modal-backdrop">
       <div
         id="backup-restore-modal"
-        className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95"
+        className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[92vh] modal-panel"
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/60">
@@ -276,14 +276,14 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                 資料備份與復原系統
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                支援課表與作業各自獨立匯出備份，具備 SHA-256 完整性雜湊驗證
+                支援課表與作業各自獨立匯出備份與完整性驗證
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl btn-press cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -298,7 +298,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
               setErrorMessage('');
               setSuccessMessage('');
             }}
-            className={`flex items-center gap-2 pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer ${
+            className={`flex items-center gap-2 pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 btn-press cursor-pointer ${
               activeTab === 'assignments'
                 ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
@@ -315,7 +315,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
               setErrorMessage('');
               setSuccessMessage('');
             }}
-            className={`flex items-center gap-2 pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer ${
+            className={`flex items-center gap-2 pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 btn-press cursor-pointer ${
               activeTab === 'schedule'
                 ? 'border-blue-600 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
@@ -363,7 +363,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                   <button
                     type="button"
                     onClick={handleExportAssignments}
-                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white text-xs font-bold rounded-xl shadow-xs shadow-blue-500/25 flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs shadow-blue-500/25 flex items-center justify-center gap-2 btn-press cursor-pointer shrink-0"
                   >
                     <Download className="w-4 h-4" />
                     <span>匯出作業備份 (.json)</span>
@@ -491,7 +491,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                         type="button"
                         onClick={handleConfirmRestoreAssignments}
                         disabled={isProcessing}
-                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs btn-press flex items-center gap-2 cursor-pointer disabled:opacity-50"
                       >
                         <CheckCircle2 className="w-4 h-4" />
                         <span>{isProcessing ? '復原中...' : '確認執行作業復原'}</span>
@@ -519,7 +519,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                   <button
                     type="button"
                     onClick={handleExportSchedule}
-                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white text-xs font-bold rounded-xl shadow-xs shadow-blue-500/25 flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs shadow-blue-500/25 flex items-center justify-center gap-2 btn-press cursor-pointer shrink-0"
                   >
                     <Download className="w-4 h-4" />
                     <span>匯出課表備份 (.json)</span>
@@ -543,8 +543,8 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                   <button
                     type="button"
                     onClick={handleResetToDefaultSchedule}
-                    className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer font-medium"
-                    title="還原軍校正98期預設官方課表"
+                    className="px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl btn-press flex items-center gap-1.5 cursor-pointer font-medium"
+                    title="還原預設官方標準課表"
                   >
                     <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
                     <span>還原預設課表</span>
@@ -601,7 +601,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                         type="button"
                         onClick={handleConfirmRestoreSchedule}
                         disabled={isProcessing}
-                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs btn-press flex items-center gap-2 cursor-pointer disabled:opacity-50"
                       >
                         <CheckCircle2 className="w-4 h-4" />
                         <span>{isProcessing ? '復原中...' : '確認執行課表復原'}</span>
@@ -619,7 +619,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+            className="px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-semibold btn-press cursor-pointer"
           >
             完成並關閉
           </button>

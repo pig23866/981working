@@ -14,9 +14,10 @@ import {
   AlertCircle,
   CheckSquare,
   Square,
+  Users,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Assignment, Subject, AssignmentStatus } from '../types';
+import { Assignment, Subject, AssignmentStatus, AssignmentProgress, UserRole } from '../types';
 import { getUrgencyInfo, formatDateTimeDisplay } from '../lib/dateUtils';
 import { PRIORITY_LABELS, SUBMISSION_LABELS, STATUS_LABELS } from '../lib/constants';
 import { playChime } from '../lib/notifications';
@@ -24,6 +25,11 @@ import { playChime } from '../lib/notifications';
 interface AssignmentCardProps {
   assignment: Assignment;
   subject?: Subject;
+  userProgress?: AssignmentProgress;
+  currentUserRole?: UserRole;
+  completedCount?: number;
+  totalStudentsCount?: number;
+  onOpenProgressModal?: () => void;
   onEdit: (assignment: Assignment) => void;
   onDelete: (id: string) => void;
   onStatusChange: (id: string, newStatus: AssignmentStatus) => void;
@@ -33,6 +39,11 @@ interface AssignmentCardProps {
 export const AssignmentCard: React.FC<AssignmentCardProps> = ({
   assignment,
   subject,
+  userProgress,
+  currentUserRole,
+  completedCount,
+  totalStudentsCount,
+  onOpenProgressModal,
   onEdit,
   onDelete,
   onStatusChange,
@@ -40,10 +51,14 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
 }) => {
   const [showMenu, setShowMenu] = useState(false);
 
-  const urgency = getUrgencyInfo(assignment.deadline, assignment.status);
+  // Effective status is based on personal progress if available, otherwise default to 'todo'
+  const currentStatus: AssignmentStatus = userProgress?.status || 'todo';
+  const isAdmin = currentUserRole === 'admin';
+
+  const urgency = getUrgencyInfo(assignment.deadline, currentStatus);
   const priorityInfo = PRIORITY_LABELS[assignment.priority];
   const submissionInfo = SUBMISSION_LABELS[assignment.submissionType] || SUBMISSION_LABELS.other;
-  const statusInfo = STATUS_LABELS[assignment.status];
+  const statusInfo = STATUS_LABELS[currentStatus];
 
   const totalSubtasks = assignment.subtasks.length;
   const completedSubtasks = assignment.subtasks.filter((st) => st.isCompleted).length;
@@ -62,15 +77,16 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
   };
 
   const isUrgent = urgency.level === 'overdue' || urgency.level === 'today';
+  const isDone = currentStatus === 'completed' || currentStatus === 'submitted';
   const attachments = assignment.attachments || assignment.driveAttachments || [];
 
   return (
     <div
       id={`assignment-card-${assignment.id}`}
-      className={`group relative bg-white dark:bg-slate-900 rounded-2xl border transition-all duration-200 hover:shadow-md ${
+      className={`group relative bg-white dark:bg-slate-900 rounded-2xl border card-lift ${
         isUrgent
           ? 'border-red-300 dark:border-red-900/70 ring-1 ring-red-200/60 dark:ring-red-900/30'
-          : assignment.status === 'completed' || assignment.status === 'submitted'
+          : isDone
           ? 'border-emerald-200/80 dark:border-emerald-900/50 bg-slate-50/40 dark:bg-slate-900/50'
           : 'border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
       }`}
@@ -82,7 +98,7 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             {subject && (
               <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border ${subject.badgeBg} ${subject.badgeBorder}`}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors duration-200 ${subject.badgeBg} ${subject.badgeBorder}`}
               >
                 <span
                   className="w-1.5 h-1.5 rounded-full"
@@ -93,13 +109,13 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
             )}
 
             <span
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border ${priorityInfo.badge}`}
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border transition-colors duration-200 ${priorityInfo.badge}`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${priorityInfo.dot}`} />
               {priorityInfo.label}
             </span>
 
-            <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100/80 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+            <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100/80 dark:bg-slate-800 px-2 py-0.5 rounded-md transition-colors duration-200">
               <GraduationCap className="w-3 h-3" />
               {submissionInfo.label}
             </span>
@@ -110,14 +126,14 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
             <button
               type="button"
               onClick={() => setShowMenu(!showMenu)}
-              className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+              className="btn-press p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
               aria-label="Options"
             >
               <MoreVertical className="w-4 h-4" />
             </button>
 
             {showMenu && (
-              <div className="absolute right-0 mt-1 w-32 bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-100 dark:border-slate-800 py-1 z-20 animate-in fade-in zoom-in-95">
+              <div className="absolute right-0 mt-1 w-32 bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-100 dark:border-slate-800 py-1 z-20 animate-in fade-in zoom-in-95 duration-150">
                 <button
                   type="button"
                   onClick={() => {
@@ -149,9 +165,7 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
         {/* Title */}
         <h3
           className={`text-base font-bold text-slate-900 dark:text-white leading-snug cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors ${
-            assignment.status === 'completed' || assignment.status === 'submitted'
-              ? 'line-through text-slate-400 dark:text-slate-500'
-              : ''
+            isDone ? 'line-through text-slate-400 dark:text-slate-500' : ''
           }`}
           onClick={() => onEdit(assignment)}
         >
@@ -167,7 +181,7 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
 
         {/* Deadline & Urgency Reminder Row */}
         <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <div
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border ${urgency.bgClass} ${urgency.colorClass} ${urgency.borderClass}`}
             >
@@ -183,6 +197,24 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
               <Calendar className="w-3 h-3 text-slate-400" />
               {formatDateTimeDisplay(assignment.deadline)}
             </span>
+
+            {/* Admin only: completion count button to open student list modal */}
+            {isAdmin && onOpenProgressModal && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenProgressModal();
+                }}
+                className="btn-press inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-all cursor-pointer shadow-2xs"
+                title="點擊查看全班學員完成進度名單"
+              >
+                <Users className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                <span>
+                  已完成 {completedCount ?? 0} / {totalStudentsCount ?? 0} 人
+                </span>
+              </button>
+            )}
           </div>
 
           {/* Status Quick Button */}
@@ -191,17 +223,17 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
               type="button"
               onClick={() =>
                 handleStatusClick(
-                  assignment.status === 'submitted'
+                  currentStatus === 'submitted'
                     ? 'todo'
-                    : assignment.status === 'completed'
+                    : currentStatus === 'completed'
                     ? 'submitted'
-                    : assignment.status === 'in_progress'
+                    : currentStatus === 'in_progress'
                     ? 'completed'
                     : 'in_progress'
                 )
               }
-              className={`px-2 py-0.5 rounded-md font-medium transition-all ${statusInfo.badge} cursor-pointer`}
-              title="點擊切換狀態"
+              className={`btn-press px-2 py-0.5 rounded-md font-medium transition-all duration-200 ${statusInfo.badge} cursor-pointer`}
+              title="點擊切換個人狀態"
             >
               {statusInfo.label}
             </button>
@@ -210,19 +242,19 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
 
         {/* Subtasks Progress & Interactive Checklist */}
         {totalSubtasks > 0 && (
-          <div className="mt-3 bg-slate-50/80 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+          <div className="mt-3 bg-slate-50/80 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 transition-colors duration-200">
             <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300 mb-1.5">
               <span className="font-medium flex items-center gap-1">
                 <CheckSquare className="w-3.5 h-3.5 text-blue-500" />
                 步驟清單 ({completedSubtasks}/{totalSubtasks})
               </span>
-              <span className="font-semibold text-slate-700 dark:text-slate-200">{progressPercent}%</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-200 transition-colors duration-200">{progressPercent}%</span>
             </div>
 
             {/* Progress Bar */}
             <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
               <div
-                className={`h-full transition-all duration-300 ${
+                className={`h-full transition-all duration-300 ease-out ${
                   progressPercent === 100 ? 'bg-emerald-500' : 'bg-blue-500'
                 }`}
                 style={{ width: `${progressPercent}%` }}
@@ -235,14 +267,14 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
                 <div
                   key={st.id}
                   onClick={() => onToggleSubtask(assignment.id, st.id)}
-                  className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer py-0.5 select-none"
+                  className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer py-0.5 select-none transition-all duration-150 hover:translate-x-0.5"
                 >
                   {st.isCompleted ? (
-                    <CheckSquare className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <CheckSquare className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 transition-transform duration-150 scale-105" />
                   ) : (
-                    <Square className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <Square className="w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-150" />
                   )}
-                  <span className={st.isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : ''}>
+                  <span className={`transition-all duration-200 ${st.isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : ''}`}>
                     {st.title}
                   </span>
                 </div>
@@ -264,7 +296,7 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
                 href={file.url || '#'}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors shadow-2xs group/link"
+                className="btn-press inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all duration-150 shadow-2xs group/link"
               >
                 <FileText className="w-3 h-3 text-slate-500 dark:text-slate-400" />
                 <span className="max-w-[160px] truncate">{file.name}</span>
@@ -282,8 +314,8 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
           <button
             type="button"
             onClick={() => handleStatusClick('todo')}
-            className={`px-2 py-0.5 rounded text-[11px] hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer ${
-              assignment.status === 'todo' ? 'font-bold text-slate-800 dark:text-white' : 'text-slate-400'
+            className={`btn-press px-2 py-0.5 rounded text-[11px] hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-150 cursor-pointer ${
+              currentStatus === 'todo' ? 'font-bold text-slate-800 dark:text-white' : 'text-slate-400'
             }`}
           >
             待辦
@@ -292,8 +324,8 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
           <button
             type="button"
             onClick={() => handleStatusClick('in_progress')}
-            className={`px-2 py-0.5 rounded text-[11px] hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors cursor-pointer ${
-              assignment.status === 'in_progress' ? 'font-bold text-blue-700 dark:text-blue-300' : 'text-slate-400'
+            className={`btn-press px-2 py-0.5 rounded text-[11px] hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-all duration-150 cursor-pointer ${
+              currentStatus === 'in_progress' ? 'font-bold text-blue-700 dark:text-blue-300' : 'text-slate-400'
             }`}
           >
             進行中
@@ -302,8 +334,8 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
           <button
             type="button"
             onClick={() => handleStatusClick('completed')}
-            className={`px-2 py-0.5 rounded text-[11px] hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors cursor-pointer ${
-              assignment.status === 'completed' ? 'font-bold text-emerald-700 dark:text-emerald-300' : 'text-slate-400'
+            className={`btn-press px-2 py-0.5 rounded text-[11px] hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-all duration-150 cursor-pointer ${
+              currentStatus === 'completed' ? 'font-bold text-emerald-700 dark:text-emerald-300' : 'text-slate-400'
             }`}
           >
             完成
@@ -312,8 +344,8 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
           <button
             type="button"
             onClick={() => handleStatusClick('submitted')}
-            className={`px-2 py-0.5 rounded text-[11px] hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors cursor-pointer ${
-              assignment.status === 'submitted' ? 'font-bold text-indigo-700 dark:text-indigo-300' : 'text-slate-400'
+            className={`btn-press px-2 py-0.5 rounded text-[11px] hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-all duration-150 cursor-pointer ${
+              currentStatus === 'submitted' ? 'font-bold text-indigo-700 dark:text-indigo-300' : 'text-slate-400'
             }`}
           >
             已繳交

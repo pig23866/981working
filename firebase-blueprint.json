@@ -1,0 +1,131 @@
+{
+  "entities": {
+    "assignment": {
+      "title": "Assignment",
+      "description": "A homework assignment or academic task",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "description": { "type": "string" },
+        "deadline": { "type": "string" },
+        "priority": { "type": "string", "enum": ["high", "medium", "low"] },
+        "status": { "type": "string", "enum": ["todo", "in_progress", "completed", "submitted"] },
+        "submissionType": { "type": "string" },
+        "subtasks": { "type": "array" },
+        "attachments": { "type": "array" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "subjectId", "deadline", "priority", "status"]
+    },
+    "course": {
+      "title": "CourseEntry",
+      "description": "A scheduled course in the weekly timetable",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "dayOfWeek": { "type": "number" },
+        "period": { "type": "number" },
+        "courseName": { "type": "string" },
+        "teacher": { "type": "string" },
+        "classroom": { "type": "string" },
+        "category": { "type": "string" },
+        "color": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "dayOfWeek", "period", "courseName"]
+    },
+    "subject": {
+      "title": "Subject",
+      "description": "An academic subject or course category",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "color": { "type": "string" },
+        "badgeBg": { "type": "string" },
+        "badgeText": { "type": "string" },
+        "badgeBorder": { "type": "string" },
+        "accentBg": { "type": "string" },
+        "icon": { "type": "string" }
+      },
+      "required": ["id", "name", "code"]
+    },
+    "audit_log": {
+      "title": "AuditLogEntry",
+      "description": "A security audit log or system event record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "category": { "type": "string" },
+        "action": { "type": "string" },
+        "level": { "type": "string", "enum": ["info", "warn", "security"] },
+        "actor": { "type": "object" },
+        "target": { "type": "string" },
+        "details": { "type": "string" },
+        "hash": { "type": "string" }
+      },
+      "required": ["id", "timestamp", "category", "action", "details"]
+    },
+    "user": {
+      "title": "AppUser",
+      "description": "User account credentials and role permissions",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "passwordHash": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "lastLoginAt": { "type": "string" }
+      },
+      "required": ["username", "displayName", "role", "passwordHash"]
+    },
+    "assignment_progress": {
+      "title": "AssignmentProgress",
+      "description": "Student individual completion progress for an assignment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "assignmentId": { "type": "string" },
+        "username": { "type": "string" },
+        "displayName": { "type": "string" },
+        "status": { "type": "string", "enum": ["todo", "in_progress", "completed", "submitted"] },
+        "completedAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "assignmentId", "username", "status", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/assignments/{assignmentId}": {
+      "schema": "assignment",
+      "description": "Academic assignments created and tracked by users"
+    },
+    "/schedule/{courseId}": {
+      "schema": "course",
+      "description": "Weekly timetable course entries"
+    },
+    "/subjects/{subjectId}": {
+      "schema": "subject",
+      "description": "Course categories and subjects"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "audit_log",
+      "description": "Security audit logs and activity records"
+    },
+    "/users/{username}": {
+      "schema": "user",
+      "description": "User accounts and credentials"
+    },
+    "/assignment_progress/{progressId}": {
+      "schema": "assignment_progress",
+      "description": "Individual student assignment completion records"
+    }
+  }
+}

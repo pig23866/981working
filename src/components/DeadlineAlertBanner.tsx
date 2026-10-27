@@ -125,7 +125,7 @@ export const DeadlineAlertBanner: React.FC<DeadlineAlertBannerProps> = ({
               id="enable-notifications-btn"
               type="button"
               onClick={handleEnableNotification}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 bg-white/80 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-700 transition-colors shadow-2xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 bg-white/80 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs btn-press cursor-pointer"
             >
               <Bell className="w-3.5 h-3.5 text-amber-500" />
               <span>開啟瀏覽器提醒</span>
@@ -137,7 +137,7 @@ export const DeadlineAlertBanner: React.FC<DeadlineAlertBannerProps> = ({
               id="filter-urgent-toggle-btn"
               type="button"
               onClick={onFilterUrgent}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition-all shadow-2xs cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl shadow-2xs btn-press cursor-pointer ${
                 isUrgentFilterActive
                   ? 'bg-red-600 text-white shadow-red-200 dark:shadow-red-950'
                   : 'bg-white dark:bg-slate-800 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 border border-red-200 dark:border-red-900/60'

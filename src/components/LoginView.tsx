@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Lock,
   User,
@@ -10,7 +10,8 @@ import {
   Sun,
   Moon,
 } from 'lucide-react';
-import { loginUser } from '../lib/auth';
+import { loginUser, syncUsersFromCloud, ensureSeedUsersSyncedToCloud } from '../lib/auth';
+import { subscribeToUsers, fetchUsersFromCloud } from '../lib/firebase';
 import { SessionUser } from '../types';
 import { playChime } from '../lib/notifications';
 
@@ -31,23 +32,46 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  useEffect(() => {
+    // Ensure all 14 official student accounts and Admin are properly uploaded to Cloud Firestore
+    ensureSeedUsersSyncedToCloud().catch(() => {});
+
+    // Live synchronization with Firestore users collection
+    const unsubscribe = subscribeToUsers((cloudUsers) => {
+      syncUsersFromCloud(cloudUsers);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      const result = loginUser(username, password);
-      setIsLoading(false);
+    let result = loginUser(username, password);
 
-      if (result.success && result.user) {
-        playChime('success');
-        onLoginSuccess(result.user);
-      } else {
-        setErrorMessage(result.error || '登入失敗，請確認帳號與密碼');
-        playChime('urgent');
+    // If initial check fails, fetch fresh cloud users once in case of recent update
+    if (!result.success) {
+      try {
+        const cloudUsers = await fetchUsersFromCloud();
+        if (cloudUsers.length > 0) {
+          syncUsersFromCloud(cloudUsers);
+          result = loginUser(username, password);
+        }
+      } catch (err) {
+        console.warn('Cloud user refresh notice:', err);
       }
-    }, 200);
+    }
+
+    setIsLoading(false);
+
+    if (result.success && result.user) {
+      playChime('success');
+      onLoginSuccess(result.user);
+    } else {
+      setErrorMessage(result.error || '登入失敗，請確認帳號與密碼');
+      playChime('urgent');
+    }
   };
 
   return (
@@ -57,7 +81,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
         <button
           type="button"
           onClick={onToggleDarkMode}
-          className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-amber-400 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs transition-all cursor-pointer"
+          className="p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-amber-400 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-xs btn-press cursor-pointer"
           title={isDarkMode ? '切換為淺色模式' : '切換為深色模式'}
           aria-label="Toggle Theme"
         >
@@ -66,7 +90,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
       </div>
 
       {/* Main Login Card - Multi-platform responsive container */}
-      <div className="w-full max-w-sm sm:max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-xl dark:shadow-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 relative z-10 transition-all duration-200">
+      <div className="w-full max-w-sm sm:max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-xl dark:shadow-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 relative z-10 modal-panel">
         {/* Brand Header */}
         <div className="text-center mb-6 sm:mb-8">
           <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center mx-auto shadow-md shadow-blue-500/20 mb-3">
@@ -76,7 +100,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
             作業統整管理系統
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            陸軍官校正98期 • 課表與作業管理平台
+            智慧課表與作業統整管理平台
           </p>
         </div>
 
@@ -143,7 +167,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
             id="login-submit-btn"
             type="submit"
             disabled={isLoading}
-            className="w-full pt-1 py-3 sm:py-2.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white text-sm font-bold rounded-xl shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+            className="w-full pt-1 py-3 sm:py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-md shadow-blue-500/20 btn-press flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
           >
             {isLoading ? (
               <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

@@ -14,9 +14,12 @@ import {
   Clock,
   Sparkles,
   Lock,
+  RotateCw,
+  Cloud,
 } from 'lucide-react';
 import { AuditLogEntry, LogCategory, LogLevel, SessionUser } from '../types';
 import { loadAuditLogs, clearAuditLogs, exportAuditLogsJSON } from '../lib/auditLogger';
+import { subscribeToAuditLogs, fetchAuditLogsFromCloud } from '../lib/firebase';
 import { playChime } from '../lib/notifications';
 
 interface AuditLogModalProps {
@@ -43,16 +46,49 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedLevel, setSelectedLevel] = useState<string>('all');
-
-  const refreshLogs = () => {
-    setLogs(loadAuditLogs());
-  };
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
-      refreshLogs();
-    }
+    if (!isOpen) return;
+
+    // Load initial local logs
+    setLogs(loadAuditLogs());
+
+    // Subscribe to live cloud logs
+    const unsubscribe = subscribeToAuditLogs(
+      (cloudLogs) => {
+        if (cloudLogs.length > 0) {
+          setLogs(cloudLogs);
+        }
+      },
+      (err) => {
+        console.warn('Real-time audit log sync notice:', err);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
   }, [isOpen]);
+
+  const handleManualRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      const cloudLogs = await fetchAuditLogsFromCloud();
+      if (cloudLogs.length > 0) {
+        setLogs(cloudLogs);
+      } else {
+        setLogs(loadAuditLogs());
+      }
+      playChime('info');
+    } catch (e) {
+      console.error('Failed to refresh cloud logs:', e);
+      setLogs(loadAuditLogs());
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -85,7 +121,7 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({
       displayName: currentUser.displayName,
       role: currentUser.role,
     });
-    refreshLogs();
+    handleManualRefresh();
     playChime('info');
   };
 
@@ -108,10 +144,10 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs modal-backdrop">
       <div
         id="audit-log-modal"
-        className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95"
+        className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh] modal-panel"
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/60">
@@ -127,13 +163,9 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({
                 <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                   管理員專屬
                 </span>
-                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono font-medium rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                  <Lock className="w-2.5 h-2.5 text-slate-400" />
-                  SHA-256 雜湊鏈保護
-                </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                完整記錄帳號操作、作業變更、課表維護與備份歷程
+                記錄帳號操作、作業變更、課表維護與系統安全事件
               </p>
             </div>
           </div>
@@ -141,8 +173,19 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={exportAuditLogsJSON}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition-colors cursor-pointer"
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl btn-press cursor-pointer"
+              title="重新整理雲端日誌"
+            >
+              <RotateCw className={`w-3.5 h-3.5 text-blue-500 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">重新整理</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => exportAuditLogsJSON(logs)}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl btn-press cursor-pointer"
               title="匯出完整日誌 JSON"
             >
               <Download className="w-3.5 h-3.5" />
@@ -152,7 +195,7 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({
             <button
               type="button"
               onClick={handleClearLogs}
-              className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl transition-colors cursor-pointer"
+              className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl btn-press cursor-pointer"
               title="清空日誌記錄"
             >
               <Trash2 className="w-4 h-4" />
@@ -161,7 +204,7 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer ml-1"
+              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl btn-press cursor-pointer ml-1"
             >
               <X className="w-5 h-5" />
             </button>
@@ -281,20 +324,12 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({
                     {log.details}
                   </p>
 
-                  {/* Hash & Target details */}
-                  <div className="mt-2 pt-2 border-t border-slate-200/50 dark:border-slate-700/50 flex flex-wrap items-center justify-between text-[10px] text-slate-400 gap-2">
-                    <div className="flex items-center gap-2">
-                      {log.target && (
-                        <span>
-                          目標：<strong className="text-slate-600 dark:text-slate-300">{log.target}</strong>
-                        </span>
-                      )}
+                  {/* Target details (不顯示雜湊值) */}
+                  {log.target && (
+                    <div className="mt-2 pt-2 border-t border-slate-200/50 dark:border-slate-700/50 text-[11px] text-slate-500 dark:text-slate-400">
+                      目標：<strong className="text-slate-700 dark:text-slate-300 font-medium">{log.target}</strong>
                     </div>
-                    <div className="flex items-center gap-1 font-mono text-[10px] text-slate-400">
-                      <ShieldCheck className="w-3 h-3 text-emerald-500" />
-                      <span>Hash: {log.hash.substring(0, 12)}...</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               );
             })

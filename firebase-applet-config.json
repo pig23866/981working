@@ -3,6 +3,7 @@
   "appId": "1:526795052019:web:4d318e762b15f44a247886",
   "apiKey": "AIzaSyCo5MRY0HGCo--ppzgw4xZ8BNaaej4KzYE",
   "authDomain": "agile-skyline-446819-m4.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-fc1d099f-837b-42c6-b5cb-2d629f2eaadd",
   "storageBucket": "agile-skyline-446819-m4.firebasestorage.app",
   "messagingSenderId": "526795052019",
   "measurementId": "",

@@ -1,5 +1,6 @@
 import { AuditLogEntry, LogCategory, LogLevel, AuditLogActor } from '../types';
 import { computeHash } from './integrity';
+import { saveAuditLogToCloud, clearAuditLogsInCloud } from './firebase';
 
 const AUDIT_LOGS_STORAGE_KEY = 'hw_audit_logs_v2';
 const MAX_LOGS = 500;
@@ -24,10 +25,12 @@ export function loadAuditLogs(): AuditLogEntry[] {
           role: 'admin',
         },
         target: 'AuditLogger',
-        details: '系統日誌服務與完整性 Hash 雜湊保護機制已就緒。',
+        details: '系統日誌服務與完整性 Hash 雜湊保護機制已就緒，並已串接雲端 Firestore 資料庫。',
         hash: computeHash('INIT_ROOT_HASH::' + new Date().toISOString()),
       };
       saveAuditLogs([initial]);
+      // Also push initial seed to cloud
+      saveAuditLogToCloud(initial).catch(() => {});
       return [initial];
     }
     return JSON.parse(raw);
@@ -51,7 +54,8 @@ function saveAuditLogs(logs: AuditLogEntry[]): void {
 }
 
 /**
- * Records an audit log entry with SHA-256 cryptographic chaining.
+ * Records an audit log entry with SHA-256 cryptographic chaining
+ * and synchronizes immediately to Cloud Firestore.
  */
 export function logAuditEvent(params: {
   category: LogCategory;
@@ -91,20 +95,26 @@ export function logAuditEvent(params: {
     action: params.action,
     level,
     actor: params.actor,
-    target: params.target,
+    target: params.target || '',
     details: params.details,
-    metadata: params.metadata,
+    metadata: params.metadata || {},
     hash,
   };
 
-  // Prepend to top so newest is first
+  // Prepend to local storage
   saveAuditLogs([fullEntry, ...currentLogs]);
+
+  // Synchronize immediately to Cloud Firestore
+  saveAuditLogToCloud(fullEntry).catch((err) => {
+    console.warn('Failed to upload audit log to cloud:', err);
+  });
+
   return fullEntry;
 }
 
 /**
  * Clears all audit logs (Admin only operation).
- * Leaves a record that logs were cleared by the admin.
+ * Leaves a record that logs were cleared by the admin in both local and cloud.
  */
 export function clearAuditLogs(adminActor: AuditLogActor): void {
   const clearEntry: AuditLogEntry = {
@@ -119,13 +129,22 @@ export function clearAuditLogs(adminActor: AuditLogActor): void {
     hash: computeHash(`CLEARED_BY_${adminActor.username}_${Date.now()}`),
   };
   saveAuditLogs([clearEntry]);
+
+  // Clear in Cloud Firestore and record the clear action
+  clearAuditLogsInCloud()
+    .then(() => {
+      saveAuditLogToCloud(clearEntry).catch(() => {});
+    })
+    .catch((err) => {
+      console.warn('Failed to clear cloud audit logs:', err);
+    });
 }
 
 /**
  * Exports logs as formatted JSON.
  */
-export function exportAuditLogsJSON(): void {
-  const logs = loadAuditLogs();
+export function exportAuditLogsJSON(customLogs?: AuditLogEntry[]): void {
+  const logs = customLogs || loadAuditLogs();
   const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(logs, null, 2));
   const downloadAnchor = document.createElement('a');
   downloadAnchor.setAttribute('href', dataStr);

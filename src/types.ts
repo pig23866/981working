@@ -164,3 +164,14 @@ export interface ScheduleBackupPayload {
   checksum: string;
 }
 
+// Personal Assignment Progress (個人獨立作業完成進度)
+export interface AssignmentProgress {
+  id: string; // Format: `${assignmentId}_${username.toLowerCase()}`
+  assignmentId: string;
+  username: string;
+  displayName: string;
+  status: AssignmentStatus; // 'todo' | 'in_progress' | 'completed' | 'submitted'
+  completedAt?: string;
+  updatedAt: string;
+}
+

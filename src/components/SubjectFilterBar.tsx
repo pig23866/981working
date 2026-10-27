@@ -132,65 +132,67 @@ export const SubjectFilterBar: React.FC<SubjectFilterBarProps> = ({
         </div>
 
         {/* Right Side: Status Tabs, Sort Dropdown & View Mode Switcher */}
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-between xl:justify-end pt-2 xl:pt-0 border-t xl:border-t-0 border-slate-100 dark:border-slate-800">
-          {/* Status Tabs */}
-          <div className="inline-flex p-1 bg-slate-100/90 dark:bg-slate-800/90 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
-            <button
-              type="button"
-              onClick={() => onStatusFilterChange('all')}
-              className={`px-2.5 sm:px-3 py-1 text-xs font-medium rounded-lg transition-all cursor-pointer ${
-                statusFilter === 'all'
-                  ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-2xs font-semibold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              全部 ({totalCount})
-            </button>
-            <button
-              type="button"
-              onClick={() => onStatusFilterChange('pending')}
-              className={`px-2.5 sm:px-3 py-1 text-xs font-medium rounded-lg transition-all cursor-pointer ${
-                statusFilter === 'pending'
-                  ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-2xs font-semibold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              待繳交
-            </button>
-            <button
-              type="button"
-              onClick={() => onStatusFilterChange('done')}
-              className={`px-2.5 sm:px-3 py-1 text-xs font-medium rounded-lg transition-all cursor-pointer ${
-                statusFilter === 'done'
-                  ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-2xs font-semibold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              已完成
-            </button>
-          </div>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-2 xl:pt-0 border-t xl:border-t-0 border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+            {/* Status Tabs */}
+            <div className="inline-flex p-1 bg-slate-100/90 dark:bg-slate-800/90 rounded-xl border border-slate-200/60 dark:border-slate-700/60 flex-1 sm:flex-initial justify-center sm:justify-start">
+              <button
+                type="button"
+                onClick={() => onStatusFilterChange('all')}
+                className={`btn-press flex-1 sm:flex-initial px-2.5 sm:px-3 py-1 text-xs font-medium rounded-lg transition-all duration-150 cursor-pointer text-center ${
+                  statusFilter === 'all'
+                    ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-2xs font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                全部 ({totalCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => onStatusFilterChange('pending')}
+                className={`btn-press flex-1 sm:flex-initial px-2.5 sm:px-3 py-1 text-xs font-medium rounded-lg transition-all duration-150 cursor-pointer text-center ${
+                  statusFilter === 'pending'
+                    ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-2xs font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                待繳交
+              </button>
+              <button
+                type="button"
+                onClick={() => onStatusFilterChange('done')}
+                className={`btn-press flex-1 sm:flex-initial px-2.5 sm:px-3 py-1 text-xs font-medium rounded-lg transition-all duration-150 cursor-pointer text-center ${
+                  statusFilter === 'done'
+                    ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-2xs font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                已完成
+              </button>
+            </div>
 
-          {/* Sort selector */}
-          <div className="flex items-center gap-1 pl-1 border-l border-slate-200 dark:border-slate-700">
-            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
-            <select
-              id="assignment-sort-select"
-              value={sortBy}
-              onChange={(e) => onSortByChange(e.target.value as any)}
-              className="text-xs bg-transparent border-0 text-slate-700 dark:text-slate-200 font-medium py-1.5 pr-6 pl-1 rounded-lg focus:ring-0 cursor-pointer"
-            >
-              <option value="deadline" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">繳交期限 (最急)</option>
-              <option value="priority" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">優先等級 (高→低)</option>
-              <option value="subject" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">學科類別排序</option>
-            </select>
+            {/* Sort selector */}
+            <div className="flex items-center gap-1 pl-1 border-l border-slate-200 dark:border-slate-700 shrink-0">
+              <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+              <select
+                id="assignment-sort-select"
+                value={sortBy}
+                onChange={(e) => onSortByChange(e.target.value as any)}
+                className="text-xs bg-transparent border-0 text-slate-700 dark:text-slate-200 font-medium py-1.5 pr-6 pl-1 rounded-lg focus:ring-0 cursor-pointer transition-colors duration-150"
+              >
+                <option value="deadline" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">期限排序</option>
+                <option value="priority" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">優先等級</option>
+                <option value="subject" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">課程名稱</option>
+              </select>
+            </div>
           </div>
 
           {/* View Mode Switcher */}
-          <div className="inline-flex p-1 bg-slate-100/90 dark:bg-slate-800/90 rounded-xl border border-slate-200/60 dark:border-slate-700/60 ml-auto sm:ml-0">
+          <div className="inline-flex p-1 bg-slate-100/90 dark:bg-slate-800/90 rounded-xl border border-slate-200/60 dark:border-slate-700/60 justify-around sm:justify-start">
             <button
               type="button"
               onClick={() => onViewModeChange('list')}
-              className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`btn-press p-1.5 sm:p-2 rounded-lg transition-all duration-150 cursor-pointer ${
                 viewMode === 'list'
                   ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
@@ -202,7 +204,7 @@ export const SubjectFilterBar: React.FC<SubjectFilterBarProps> = ({
             <button
               type="button"
               onClick={() => onViewModeChange('board')}
-              className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`btn-press p-1.5 sm:p-2 rounded-lg transition-all duration-150 cursor-pointer ${
                 viewMode === 'board'
                   ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
@@ -214,7 +216,7 @@ export const SubjectFilterBar: React.FC<SubjectFilterBarProps> = ({
             <button
               type="button"
               onClick={() => onViewModeChange('calendar')}
-              className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`btn-press p-1.5 sm:p-2 rounded-lg transition-all duration-150 cursor-pointer ${
                 viewMode === 'calendar'
                   ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
@@ -226,7 +228,7 @@ export const SubjectFilterBar: React.FC<SubjectFilterBarProps> = ({
             <button
               type="button"
               onClick={() => onViewModeChange('schedule')}
-              className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`btn-press p-1.5 sm:p-2 rounded-lg transition-all duration-150 cursor-pointer ${
                 viewMode === 'schedule'
                   ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
@@ -238,12 +240,12 @@ export const SubjectFilterBar: React.FC<SubjectFilterBarProps> = ({
             <button
               type="button"
               onClick={() => onViewModeChange('subjects')}
-              className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`btn-press p-1.5 sm:p-2 rounded-lg transition-all duration-150 cursor-pointer ${
                 viewMode === 'subjects'
                   ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-2xs ring-1 ring-blue-500/30'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
               }`}
-              title="作業概覽面板 (Recharts 圖表統計)"
+              title="課程統計面板"
             >
               <PieChart className="w-4 h-4" />
             </button>

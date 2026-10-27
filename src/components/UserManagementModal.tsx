@@ -17,7 +17,15 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { AppUser, SessionUser, UserRole } from '../types';
-import { createUser, deleteUser, loadUsers, changePassword } from '../lib/auth';
+import {
+  createUser,
+  deleteUser,
+  loadUsers,
+  changePassword,
+  syncUsersWithCloud,
+  syncUsersFromCloud,
+} from '../lib/auth';
+import { subscribeToUsers } from '../lib/firebase';
 import { playChime } from '../lib/notifications';
 import confetti from 'canvas-confetti';
 
@@ -50,6 +58,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [resetConfirmPassword, setResetConfirmPassword] = useState('');
   const [showResetPassword, setShowResetPassword] = useState(false);
 
+  // Sync state
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+
   // Feedback messages
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -60,12 +71,21 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   };
 
   useEffect(() => {
-    if (isOpen) {
-      refreshList();
-      setErrorMessage('');
-      setSuccessMessage('');
-      setResetTargetUser(null);
-    }
+    if (!isOpen) return;
+    refreshList();
+    setErrorMessage('');
+    setSuccessMessage('');
+    setResetTargetUser(null);
+
+    // Live subscription with Cloud Firestore users collection (即時多裝置監聽)
+    const unsubscribe = subscribeToUsers((cloudUsers) => {
+      if (cloudUsers && cloudUsers.length > 0) {
+        syncUsersFromCloud(cloudUsers);
+        setUsersList(loadUsers());
+      }
+    });
+
+    return () => unsubscribe();
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -114,7 +134,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       setIsSubmitting(false);
 
       if (result.success && result.user) {
-        setSuccessMessage(`帳號「${result.user.username}」建立成功！密碼已使用 bcrypt 雜湊加密。`);
+        setSuccessMessage(`帳號「${result.user.username}」建立成功！`);
         playChime('success');
         confetti({ particleCount: 35, spread: 60, origin: { y: 0.7 } });
         refreshList();
@@ -187,6 +207,24 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     }
   };
 
+  // 手動從雲端拉取最新帳號資料並合併
+  const handleSyncWithCloud = async () => {
+    setIsSyncingCloud(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    try {
+      await syncUsersWithCloud();
+      refreshList();
+      setSuccessMessage('帳號清單已更新');
+      playChime('info');
+    } catch {
+      setErrorMessage('更新失敗，請檢查網路連線');
+      playChime('urgent');
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
   const filteredUsers = usersList.filter((u) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -197,10 +235,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs modal-backdrop">
       <div
         id="user-management-modal"
-        className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95"
+        className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh] modal-panel"
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/60">
@@ -218,14 +256,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                可新增系統學員帳號、指派身分權限並由 bcrypt 安全加密
+                可新增系統學員帳號、指派身分權限與管理密碼
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl btn-press cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -240,7 +278,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               setErrorMessage('');
               setSuccessMessage('');
             }}
-            className={`flex items-center gap-2 pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer ${
+            className={`flex items-center gap-2 pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 btn-press cursor-pointer ${
               activeTab === 'create'
                 ? 'border-purple-600 text-purple-600 dark:text-purple-400'
                 : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
@@ -257,7 +295,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               setErrorMessage('');
               setSuccessMessage('');
             }}
-            className={`flex items-center gap-2 pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer ${
+            className={`flex items-center gap-2 pb-3 px-3 text-xs sm:text-sm font-bold border-b-2 btn-press cursor-pointer ${
               activeTab === 'list'
                 ? 'border-purple-600 text-purple-600 dark:text-purple-400'
                 : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
@@ -392,7 +430,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               <div className="space-y-3 pt-1">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    初始密碼 (bcrypt 加密) <span className="text-red-500">*</span>
+                    初始密碼 <span className="text-red-500">*</span>
                   </label>
                   <button
                     type="button"
@@ -445,7 +483,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                   </button>
 
                   <span className="text-[11px] text-slate-400">
-                    系統使用 bcrypt 10 輪加鹽雜湊
+                    系統自動加密保護
                   </span>
                 </div>
               </div>
@@ -455,7 +493,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
+                  className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl btn-press cursor-pointer"
                 >
                   取消
                 </button>
@@ -463,7 +501,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                   id="admin-create-user-submit-btn"
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-6 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 active:scale-98 rounded-xl shadow-md shadow-purple-500/25 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="px-6 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 rounded-xl shadow-md shadow-purple-500/25 btn-press flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   {isSubmitting ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
@@ -477,16 +515,28 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           ) : (
             /* Tab 2: Existing Accounts List */
             <div className="space-y-4">
-              {/* Search Bar */}
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="搜尋帳號或使用者名稱..."
-                  className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-purple-500/25 text-slate-900 dark:text-white placeholder-slate-400"
-                />
+              {/* Search Bar & Refresh */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="搜尋帳號或使用者名稱..."
+                    className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-purple-500/25 text-slate-900 dark:text-white placeholder-slate-400"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSyncWithCloud}
+                  disabled={isSyncingCloud}
+                  className="px-3 py-2 text-xs font-semibold rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center gap-1.5 cursor-pointer disabled:opacity-50 btn-press shrink-0"
+                  title="重新整理帳號清單"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-purple-600 dark:text-purple-400 ${isSyncingCloud ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">重新整理</span>
+                </button>
               </div>
 
               {/* Admin Quick Reset Password Box */}
@@ -590,7 +640,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                             {isUserAdmin ? 'A' : '學'}
                           </div>
                           <div className="min-w-0">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
                                 {u.displayName}
                               </span>
@@ -631,7 +681,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                               setErrorMessage('');
                               setSuccessMessage('');
                             }}
-                            className="px-2.5 py-1.5 text-xs text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer font-medium"
+                            className="px-2.5 py-1.5 text-xs text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 rounded-xl btn-press flex items-center gap-1.5 cursor-pointer font-medium"
                             title="重設此帳號密碼"
                           >
                             <KeyRound className="w-3 h-3 text-purple-600" />
@@ -642,7 +692,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                             <button
                               type="button"
                               onClick={() => handleDeleteUser(u.username)}
-                              className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-xl transition-colors cursor-pointer"
+                              className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-xl btn-press cursor-pointer"
                               title="刪除此帳號"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
