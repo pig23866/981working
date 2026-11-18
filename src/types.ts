@@ -118,6 +118,7 @@ export interface SessionUser {
   username: string;
   displayName: string;
   role: UserRole;
+  expiresAt?: number;
 }
 
 // Audit Log Types (日誌系統 - 僅管理員可查看)

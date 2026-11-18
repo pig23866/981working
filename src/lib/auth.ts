@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { AppUser, SessionUser, UserRole } from '../types';
-import { loadWithIntegrity, saveWithIntegrity } from './integrity';
+import { loadWithIntegrity, saveWithIntegrity, removeWithIntegrity } from './integrity';
 import { logAuditEvent } from './auditLogger';
 import {
   saveUserToCloud,
@@ -160,17 +160,21 @@ export function syncUsersFromCloud(cloudUsers: AppUser[]): void {
 }
 
 /**
- * 確保所有 14 位學員與管理員帳號皆已同步至 Cloud Firestore
+ * 確保所有 14 位學員與管理員種子帳號皆存在於 Cloud Firestore（僅補齊尚未建立之帳號，絕不覆寫既有密碼）
  */
 export async function ensureSeedUsersSyncedToCloud(): Promise<void> {
   try {
+    const cloudUsers = await fetchUsersFromCloud();
+    const existingSet = new Set(cloudUsers.map((u) => u.username.toLowerCase()));
     const seeds = getInitialSeedUsers();
     for (const u of seeds) {
-      await saveUserToCloud(u);
+      if (!existingSet.has(u.username.toLowerCase())) {
+        await saveUserToCloud(u);
+      }
     }
   } catch (err) {
     console.warn('Notice ensuring seed users in cloud:', err);
-}
+  }
 }
 
 /**
@@ -258,20 +262,27 @@ interface LoginAttemptRecord {
 }
 
 function loadLoginAttempts(): Record<string, LoginAttemptRecord> {
-  try {
-    const raw = localStorage.getItem(ATTEMPTS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
+  if (!localStorage.getItem(ATTEMPTS_STORAGE_KEY)) {
     return {};
   }
+  return loadWithIntegrity<Record<string, LoginAttemptRecord>>(
+    ATTEMPTS_STORAGE_KEY,
+    {},
+    (details) => {
+      logAuditEvent({
+        category: 'security',
+        action: '登入鎖定紀錄異常修復',
+        level: 'security',
+        actor: { username: 'System', displayName: '安全保護引擎', role: 'admin' },
+        target: ATTEMPTS_STORAGE_KEY,
+        details,
+      });
+    }
+  );
 }
 
 function saveLoginAttempts(data: Record<string, LoginAttemptRecord>): void {
-  try {
-    localStorage.setItem(ATTEMPTS_STORAGE_KEY, JSON.stringify(data));
-  } catch (e) {
-    console.error('Failed to save login attempts:', e);
-  }
+  saveWithIntegrity(ATTEMPTS_STORAGE_KEY, data);
 }
 
 // Check if an account is currently locked due to brute-force attacks
@@ -426,6 +437,7 @@ export function loginUser(
     username: found.username,
     displayName: found.displayName,
     role: found.role,
+    expiresAt: Date.now() + SESSION_TTL_MS,
   };
 
   saveCurrentSession(sessionUser);
@@ -609,29 +621,93 @@ export function deleteUser(
   return { success: true };
 }
 
-// Load currently active session
+const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours sliding session timeout
+
+// Load currently active session (verified with integrity hash, expiration, and active user record)
 export function loadCurrentSession(): SessionUser | null {
   try {
     const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
+    if (!raw || raw === 'null') return null;
+
+    let tampered = false;
+    const session = loadWithIntegrity<SessionUser | null>(
+      SESSION_STORAGE_KEY,
+      null,
+      (details) => {
+        tampered = true;
+        logAuditEvent({
+          category: 'security',
+          action: 'Session 竄改攔截',
+          level: 'security',
+          actor: { username: 'System', displayName: '安全保護引擎', role: 'admin' },
+          target: SESSION_STORAGE_KEY,
+          details,
+        });
+      }
+    );
+
+    if (tampered || !session || typeof session.username !== 'string') {
+      removeWithIntegrity(SESSION_STORAGE_KEY);
+      return null;
+    }
+
+    if (typeof session.expiresAt !== 'number' || Date.now() > session.expiresAt) {
+      removeWithIntegrity(SESSION_STORAGE_KEY);
+      return null;
+    }
+
+    const users = loadUsers();
+    const matchedUser = users.find(
+      (u) => u.username.toLowerCase() === session.username.toLowerCase()
+    );
+    if (!matchedUser) {
+      removeWithIntegrity(SESSION_STORAGE_KEY);
+      return null;
+    }
+
+    return {
+      username: matchedUser.username,
+      displayName: matchedUser.displayName,
+      role: matchedUser.role,
+      expiresAt: session.expiresAt,
+    };
   } catch (e) {
     console.error('Failed to load session:', e);
+    removeWithIntegrity(SESSION_STORAGE_KEY);
     return null;
   }
 }
 
-// Save active session
+// Save active session with cryptographic integrity protection
 export function saveCurrentSession(user: SessionUser | null): void {
   try {
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
     if (!user) {
-      localStorage.removeItem(SESSION_STORAGE_KEY);
+      removeWithIntegrity(SESSION_STORAGE_KEY);
     } else {
-      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(user));
+      const normalized: SessionUser = {
+        username: user.username,
+        displayName: user.displayName,
+        role: user.role,
+        expiresAt: user.expiresAt ?? Date.now() + SESSION_TTL_MS,
+      };
+      saveWithIntegrity(SESSION_STORAGE_KEY, normalized);
     }
   } catch (e) {
     console.error('Failed to save session:', e);
   }
+}
+
+// Refresh sliding expiration timestamp on active user interaction
+export function refreshSessionActivity(): SessionUser | null {
+  const active = loadCurrentSession();
+  if (!active) return null;
+  const refreshed: SessionUser = {
+    ...active,
+    expiresAt: Date.now() + SESSION_TTL_MS,
+  };
+  saveCurrentSession(refreshed);
+  return refreshed;
 }
 
 // Logout session

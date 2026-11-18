@@ -27,6 +27,7 @@ import {
 } from '../lib/auth';
 import { subscribeToUsers } from '../lib/firebase';
 import { playChime } from '../lib/notifications';
+import { generateSecurePassword } from '../lib/integrity';
 import confetti from 'canvas-confetti';
 
 interface UserManagementModalProps {
@@ -90,13 +91,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Handle generating a random secure initial password
+  // Handle generating a cryptographically random secure initial password
   const handleGeneratePassword = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-    let generated = 'Aa';
-    for (let i = 0; i < 6; i++) {
-      generated += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
+    const generated = generateSecurePassword(10);
     setNewPassword(generated);
     setConfirmPassword(generated);
     setShowPassword(true);

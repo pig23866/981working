@@ -9,6 +9,7 @@ import {
   ArrowUpDown,
   X,
   BookOpen,
+  ChevronDown,
 } from 'lucide-react';
 import { Subject, ViewMode } from '../types';
 
@@ -87,14 +88,11 @@ export const SubjectFilterBar: React.FC<SubjectFilterBarProps> = ({
                   const val = e.target.value;
                   onSelectSubject(val ? val : null);
                 }}
-                className={`w-full sm:w-auto pl-8 pr-8 py-2.5 sm:py-2 text-xs sm:text-sm font-semibold rounded-xl border transition-all cursor-pointer appearance-none bg-no-repeat bg-[right_0.65rem_center] bg-[length:1em_1em] ${
+                className={`w-full sm:w-auto pl-8 pr-8 py-2.5 sm:py-2 text-xs sm:text-sm font-semibold rounded-xl border transition-all cursor-pointer appearance-none ${
                   selectedSubjectId
                     ? 'bg-blue-50 dark:bg-blue-950/70 text-blue-800 dark:text-blue-200 border-blue-300 dark:border-blue-700 ring-2 ring-blue-500/10'
                     : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-100/70 dark:hover:bg-slate-700/60'
                 }`}
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                }}
               >
                 <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                   全部課程 ({totalCount} 筆作業)
@@ -110,6 +108,9 @@ export const SubjectFilterBar: React.FC<SubjectFilterBarProps> = ({
                   })}
                 </optgroup>
               </select>
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 flex items-center">
+                <ChevronDown className="w-4 h-4" />
+              </div>
             </div>
 
             {/* Clear Subject Filter Tag if selected */}

@@ -25,6 +25,7 @@ import {
 } from '../types';
 import { SUBMISSION_LABELS, PRIORITY_LABELS } from '../lib/constants';
 import { formatDateForInput } from '../lib/dateUtils';
+import { sanitizeHttpUrl } from '../lib/integrity';
 
 interface AssignmentModalProps {
   isOpen: boolean;
@@ -66,6 +67,7 @@ export const AssignmentModal: React.FC<AssignmentModalProps> = ({
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [newAttachmentName, setNewAttachmentName] = useState('');
   const [newAttachmentUrl, setNewAttachmentUrl] = useState('');
+  const [attachmentUrlError, setAttachmentUrlError] = useState('');
   const [showAddAttachment, setShowAddAttachment] = useState(false);
 
   useEffect(() => {
@@ -107,6 +109,7 @@ export const AssignmentModal: React.FC<AssignmentModalProps> = ({
       setAttachments([]);
       setShowAdvanced(false);
     }
+    setAttachmentUrlError('');
     setShowAddAttachment(false);
   }, [initialData, prefillData, isOpen, subjects]);
 
@@ -134,14 +137,25 @@ export const AssignmentModal: React.FC<AssignmentModalProps> = ({
 
   const handleAddAttachment = () => {
     if (!newAttachmentName.trim()) return;
+    const rawUrl = newAttachmentUrl.trim();
+    let finalUrl = '#';
+    if (rawUrl && rawUrl !== '#') {
+      const safe = sanitizeHttpUrl(rawUrl);
+      if (!safe) {
+        setAttachmentUrlError('請輸入有效的 http:// 或 https:// 網址');
+        return;
+      }
+      finalUrl = safe;
+    }
     const item: AttachmentItem = {
       id: `att-${Date.now()}`,
       name: newAttachmentName.trim(),
-      url: newAttachmentUrl.trim() || '#',
+      url: finalUrl,
     };
     setAttachments([...attachments, item]);
     setNewAttachmentName('');
     setNewAttachmentUrl('');
+    setAttachmentUrlError('');
     setShowAddAttachment(false);
   };
 
@@ -498,13 +512,22 @@ export const AssignmentModal: React.FC<AssignmentModalProps> = ({
                         type="url"
                         placeholder="網址 (例如：https://...)"
                         value={newAttachmentUrl}
-                        onChange={(e) => setNewAttachmentUrl(e.target.value)}
+                        onChange={(e) => {
+                          setNewAttachmentUrl(e.target.value);
+                          if (attachmentUrlError) setAttachmentUrlError('');
+                        }}
                         className="w-full px-2.5 py-1 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white"
                       />
+                      {attachmentUrlError && (
+                        <p className="text-[11px] text-rose-600 dark:text-rose-400">{attachmentUrlError}</p>
+                      )}
                       <div className="flex justify-end gap-1.5 pt-1">
                         <button
                           type="button"
-                          onClick={() => setShowAddAttachment(false)}
+                          onClick={() => {
+                            setShowAddAttachment(false);
+                            setAttachmentUrlError('');
+                          }}
                           className="px-2 py-0.5 text-xs text-slate-500 hover:bg-slate-100 rounded cursor-pointer"
                         >
                           取消

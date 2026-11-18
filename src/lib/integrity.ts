@@ -169,14 +169,14 @@ export function loadWithIntegrity<T>(
       return fallbackValue;
     }
 
-    // Verify cryptographic Hash
+    // Verify cryptographic Hash (missing hash also indicates tampering)
     const calculatedHash = computeHash(raw);
 
-    if (storedHash && calculatedHash !== storedHash) {
+    if (!storedHash || calculatedHash !== storedHash) {
       // Data was abnormally modified or tampered with!
-      // Silently try recovery from shadow snapshot
+      // Silently try recovery from shadow snapshot if storedHash is present and matches shadow
       const shadow = localStorage.getItem(`${storageKey}_shadow_snapshot`);
-      if (shadow && computeHash(shadow) === storedHash) {
+      if (storedHash && shadow && computeHash(shadow) === storedHash) {
         // Shadow is clean, silently self-heal
         localStorage.setItem(storageKey, shadow);
         if (onTamperDetected) {
@@ -198,4 +198,82 @@ export function loadWithIntegrity<T>(
     console.error(`Error loading integrity data for ${storageKey}:`, err);
     return fallbackValue;
   }
+}
+
+/**
+ * Removes an integrity-protected key and its hash/shadow artifacts from localStorage.
+ */
+export function removeWithIntegrity(storageKey: string): void {
+  try {
+    localStorage.removeItem(storageKey);
+    localStorage.removeItem(`${storageKey}_integrity_hash`);
+    localStorage.removeItem(`${storageKey}_shadow_snapshot`);
+  } catch (err) {
+    console.error(`Failed to remove integrity data for ${storageKey}:`, err);
+  }
+}
+
+/**
+ * Validates and sanitizes an external URL, strictly allowing only http: and https: protocols.
+ * Returns null for empty, malformed, or dangerous protocols (e.g. javascript:, data:, vbscript:).
+ */
+export function sanitizeHttpUrl(rawUrl: string | undefined | null): string | null {
+  if (!rawUrl) return null;
+  const trimmed = rawUrl.trim();
+  if (!trimmed || trimmed === '#') return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Escapes and protects a CSV cell value against spreadsheet formula injection (CWE-1236).
+ */
+export function sanitizeCsvCell(value: unknown): string {
+  const str = String(value ?? '');
+  const formulaSafe = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+  return `"${formulaSafe.replace(/"/g, '""')}"`;
+}
+
+/**
+ * Generates a cryptographically secure random password using Web Crypto API (no Math.random).
+ */
+export function generateSecurePassword(length = 10): string {
+  const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const targetLen = Math.max(8, length);
+  const maxValidByte = 256 - (256 % charset.length);
+  let result = '';
+
+  const buf = new Uint8Array(targetLen * 2);
+  while (result.length < targetLen) {
+    crypto.getRandomValues(buf);
+    for (let i = 0; i < buf.length && result.length < targetLen; i++) {
+      if (buf[i] < maxValidByte) {
+        result += charset.charAt(buf[i] % charset.length);
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Triggers a client-side JSON file download via Blob ObjectURL (avoids data: URIs).
+ */
+export function downloadJsonFile(filename: string, content: string): void {
+  const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const downloadAnchor = document.createElement('a');
+  downloadAnchor.setAttribute('href', url);
+  downloadAnchor.setAttribute('download', filename);
+  document.body.appendChild(downloadAnchor);
+  downloadAnchor.click();
+  downloadAnchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

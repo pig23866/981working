@@ -1,5 +1,5 @@
 import { AuditLogEntry, LogCategory, LogLevel, AuditLogActor } from '../types';
-import { computeHash } from './integrity';
+import { computeHash, downloadJsonFile } from './integrity';
 import { saveAuditLogToCloud, clearAuditLogsInCloud } from './firebase';
 
 const AUDIT_LOGS_STORAGE_KEY = 'hw_audit_logs_v2';
@@ -145,11 +145,8 @@ export function clearAuditLogs(adminActor: AuditLogActor): void {
  */
 export function exportAuditLogsJSON(customLogs?: AuditLogEntry[]): void {
   const logs = customLogs || loadAuditLogs();
-  const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(logs, null, 2));
-  const downloadAnchor = document.createElement('a');
-  downloadAnchor.setAttribute('href', dataStr);
-  downloadAnchor.setAttribute('download', `系統安全稽核日誌_${new Date().toISOString().slice(0, 10)}.json`);
-  document.body.appendChild(downloadAnchor);
-  downloadAnchor.click();
-  downloadAnchor.remove();
+  downloadJsonFile(
+    `系統安全稽核日誌_${new Date().toISOString().slice(0, 10)}.json`,
+    JSON.stringify(logs, null, 2)
+  );
 }

@@ -21,6 +21,7 @@ import { Assignment, Subject, AssignmentStatus, AssignmentProgress, UserRole } f
 import { getUrgencyInfo, formatDateTimeDisplay } from '../lib/dateUtils';
 import { PRIORITY_LABELS, SUBMISSION_LABELS, STATUS_LABELS } from '../lib/constants';
 import { playChime } from '../lib/notifications';
+import { sanitizeHttpUrl } from '../lib/integrity';
 
 interface AssignmentCardProps {
   assignment: Assignment;
@@ -290,19 +291,34 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
               <Paperclip className="w-3 h-3 text-slate-400" />
               附件:
             </span>
-            {attachments.map((file) => (
-              <a
-                key={file.id}
-                href={file.url || '#'}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-press inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all duration-150 shadow-2xs group/link"
-              >
-                <FileText className="w-3 h-3 text-slate-500 dark:text-slate-400" />
-                <span className="max-w-[160px] truncate">{file.name}</span>
-                <ExternalLink className="w-2.5 h-2.5 text-slate-400 group-hover/link:text-slate-600 dark:group-hover/link:text-slate-200" />
-              </a>
-            ))}
+            {attachments.map((file) => {
+              const safeUrl = sanitizeHttpUrl(file.url);
+              if (!safeUrl) {
+                return (
+                  <span
+                    key={file.id}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                    title="無外部連結或網址格式不受支援"
+                  >
+                    <FileText className="w-3 h-3 text-slate-500 dark:text-slate-400" />
+                    <span className="max-w-[160px] truncate">{file.name}</span>
+                  </span>
+                );
+              }
+              return (
+                <a
+                  key={file.id}
+                  href={safeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-press inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all duration-150 shadow-2xs group/link"
+                >
+                  <FileText className="w-3 h-3 text-slate-500 dark:text-slate-400" />
+                  <span className="max-w-[160px] truncate">{file.name}</span>
+                  <ExternalLink className="w-2.5 h-2.5 text-slate-400 group-hover/link:text-slate-600 dark:group-hover/link:text-slate-200" />
+                </a>
+              );
+            })}
           </div>
         )}
       </div>

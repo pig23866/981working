@@ -105,6 +105,20 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
       if (!parsed.success || !parsed.payload) {
         setErrorMessage(parsed.error || '檔案格式不符');
         setAssignmentPreview(null);
+        if (parsed.error?.includes('Checksum')) {
+          logAuditEvent({
+            category: 'security',
+            action: '備份檔驗證攔截',
+            level: 'security',
+            actor: {
+              username: currentUser.username,
+              displayName: currentUser.displayName,
+              role: currentUser.role,
+            },
+            target: file.name,
+            details: `作業備份檔案「${file.name}」SHA-256 驗證碼不符，已拒絕匯入。`,
+          });
+        }
         playChime('urgent');
       } else {
         setAssignmentPreview({
@@ -190,6 +204,20 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
       if (!parsed.success || !parsed.payload) {
         setErrorMessage(parsed.error || '檔案格式不符');
         setSchedulePreview(null);
+        if (parsed.error?.includes('Checksum')) {
+          logAuditEvent({
+            category: 'security',
+            action: '備份檔驗證攔截',
+            level: 'security',
+            actor: {
+              username: currentUser.username,
+              displayName: currentUser.displayName,
+              role: currentUser.role,
+            },
+            target: file.name,
+            details: `課表備份檔案「${file.name}」SHA-256 驗證碼不符，已拒絕匯入。`,
+          });
+        }
         playChime('urgent');
       } else {
         setSchedulePreview({
@@ -397,12 +425,21 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                 {/* File Preview if valid */}
                 {assignmentPreview && (
                   <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-3 animate-in fade-in">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200">
-                        <FileCheck className="w-4 h-4 text-emerald-500" />
+                        <FileCheck className={`w-4 h-4 ${assignmentPreview.isChecksumValid ? 'text-emerald-500' : 'text-amber-500'}`} />
                         <span>備份檔案內容預覽</span>
+                        <span
+                          className={`px-1.5 py-0.5 text-[10px] rounded font-semibold ${
+                            assignmentPreview.isChecksumValid
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                              : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                          }`}
+                        >
+                          {assignmentPreview.isChecksumValid ? 'SHA-256 驗證通過' : '未附驗證碼'}
+                        </span>
                       </div>
-                      <span className="text-[10px] text-slate-400 font-mono">
+                      <span className="text-[10px] text-slate-400 font-mono truncate max-w-[140px]">
                         {assignmentFile?.name}
                       </span>
                     </div>
@@ -565,12 +602,21 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                 {/* Schedule File Preview */}
                 {schedulePreview && (
                   <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-3 animate-in fade-in">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200">
-                        <FileCheck className="w-4 h-4 text-emerald-500" />
+                        <FileCheck className={`w-4 h-4 ${schedulePreview.isChecksumValid ? 'text-emerald-500' : 'text-amber-500'}`} />
                         <span>課表檔案內容預覽</span>
+                        <span
+                          className={`px-1.5 py-0.5 text-[10px] rounded font-semibold ${
+                            schedulePreview.isChecksumValid
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                              : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                          }`}
+                        >
+                          {schedulePreview.isChecksumValid ? 'SHA-256 驗證通過' : '未附驗證碼'}
+                        </span>
                       </div>
-                      <span className="text-[10px] text-slate-400 font-mono">
+                      <span className="text-[10px] text-slate-400 font-mono truncate max-w-[140px]">
                         {scheduleFile?.name}
                       </span>
                     </div>

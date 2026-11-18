@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Assignment, AppUser, AssignmentProgress, Subject, AssignmentStatus } from '../types';
 import { formatDateTimeDisplay, isDatePast } from '../lib/dateUtils';
+import { sanitizeCsvCell } from '../lib/integrity';
 
 interface ClassProgressOverviewModalProps {
   isOpen: boolean;
@@ -115,7 +116,7 @@ export const ClassProgressOverviewModal: React.FC<ClassProgressOverviewModalProp
   const handleExportCSV = () => {
     if (studentList.length === 0 || assignments.length === 0) return;
 
-    const headers = ['學號', '學員姓名', '個人完成率(%)', ...assignments.map((a) => `"${a.title.replace(/"/g, '""')}"`)];
+    const headers = ['學號', '學員姓名', '個人完成率(%)', ...assignments.map((a) => sanitizeCsvCell(a.title))];
     const rows = studentList.map((st) => {
       let stDone = 0;
       const statusCells = assignments.map((asg) => {
@@ -131,7 +132,7 @@ export const ClassProgressOverviewModal: React.FC<ClassProgressOverviewModalProp
       });
 
       const stRate = assignments.length > 0 ? Math.round((stDone / assignments.length) * 100) : 0;
-      return [st.username, `"${st.displayName}"`, stRate, ...statusCells].join(',');
+      return [sanitizeCsvCell(st.username), sanitizeCsvCell(st.displayName), stRate, ...statusCells].join(',');
     });
 
     const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
@@ -143,6 +144,7 @@ export const ClassProgressOverviewModal: React.FC<ClassProgressOverviewModalProp
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const handleCellClick = async (asg: Assignment, st: AppUser) => {

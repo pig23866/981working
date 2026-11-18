@@ -23,6 +23,8 @@ import {
 } from './lib/scheduleData';
 import {
   loadCurrentSession,
+  saveCurrentSession,
+  refreshSessionActivity,
   logoutSession,
   syncUsersFromCloud,
   loadUsers,
@@ -240,10 +242,41 @@ export default function App() {
       if (match && currentUser.displayName !== match.displayName) {
         const updated = { ...currentUser, displayName: match.displayName };
         setCurrentUser(updated);
-        sessionStorage.setItem('hw_auth_session_v2', JSON.stringify(updated));
-        localStorage.setItem('hw_auth_session_v2', JSON.stringify(updated));
+        saveCurrentSession(updated);
       }
     }
+  }, [currentUser]);
+
+  // Sliding session timeout & tamper re-verification monitor
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let lastRefreshAt = Date.now();
+    const handleActivity = () => {
+      const now = Date.now();
+      if (now - lastRefreshAt >= 60_000) {
+        lastRefreshAt = now;
+        const refreshed = refreshSessionActivity();
+        if (!refreshed) {
+          setCurrentUser(null);
+        }
+      }
+    };
+
+    const events: (keyof WindowEventMap)[] = ['click', 'keydown', 'touchstart'];
+    events.forEach((evt) => window.addEventListener(evt, handleActivity, { passive: true }));
+
+    const expiryCheck = setInterval(() => {
+      const verified = loadCurrentSession();
+      if (!verified) {
+        setCurrentUser(null);
+      }
+    }, 30_000);
+
+    return () => {
+      events.forEach((evt) => window.removeEventListener(evt, handleActivity));
+      clearInterval(expiryCheck);
+    };
   }, [currentUser]);
 
   // Real-time synchronization for personal assignment progress (個人獨立完成進度即時監聽)
@@ -574,6 +607,7 @@ export default function App() {
     student: AppUser,
     newStatus: AssignmentStatus
   ) => {
+    if (!currentUser || currentUser.role !== 'admin') return;
     const target = assignments.find((a) => a.id === assignmentId);
     const progressId = `${assignmentId}_${student.username.toLowerCase()}`;
     const isDone = newStatus === 'completed' || newStatus === 'submitted';
