@@ -155,7 +155,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   }`}
                 >
                   {isAdmin ? <Shield className="w-3 h-3 text-purple-500" /> : <UserIcon className="w-3 h-3 text-blue-500" />}
-                  <span>{isAdmin ? '管理員' : '一般學員'}</span>
+                  <span>{isAdmin ? '管理員' : '學生'}</span>
                 </span>
               )}
             </div>
@@ -346,24 +346,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <div className="flex-1">
                       <div>資料備份與復原</div>
                       <div className="text-[10px] text-slate-400 font-normal">
-                        匯出或還原課表與作業 JSON
-                      </div>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowFeaturesMenu(false);
-                      onClearAllAssignments();
-                    }}
-                    className="w-full px-3.5 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2.5 cursor-pointer text-left transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4 text-rose-500 shrink-0" />
-                    <div className="flex-1">
-                      <div>清空作業清單</div>
-                      <div className="text-[10px] text-rose-400/80 font-normal">
-                        清除所有已登記的作業
+                        匯出課表與作業 JSON 備份
                       </div>
                     </div>
                   </button>
@@ -430,6 +413,22 @@ export const Navbar: React.FC<NavbarProps> = ({
                         </div>
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowFeaturesMenu(false);
+                        onClearAllAssignments();
+                      }}
+                      className="w-full px-3.5 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2.5 cursor-pointer text-left transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4 text-rose-500 shrink-0" />
+                      <div className="flex-1">
+                        <div>清空作業清單</div>
+                        <div className="text-[10px] text-rose-400/80 font-normal">
+                          清除所有已登記的作業
+                        </div>
+                      </div>
+                    </button>
                   </div>
                 )}
               </div>
@@ -482,7 +481,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       {currentUser.displayName}
                     </p>
                     <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                      帳號：{currentUser.username} ({isAdmin ? '管理員' : '一般學員'})
+                      帳號：{currentUser.username} ({isAdmin ? '管理員' : '學生'})
                     </span>
                   </div>
 

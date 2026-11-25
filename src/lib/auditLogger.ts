@@ -1,39 +1,68 @@
 import { AuditLogEntry, LogCategory, LogLevel, AuditLogActor } from '../types';
-import { computeHash, downloadJsonFile } from './integrity';
+import { computeHash, downloadJsonFile, loadWithIntegrity, saveWithIntegrity } from './integrity';
 import { saveAuditLogToCloud, clearAuditLogsInCloud } from './firebase';
 
 const AUDIT_LOGS_STORAGE_KEY = 'hw_audit_logs_v2';
 const MAX_LOGS = 500;
 
+function createBootstrapLog(): AuditLogEntry {
+  const now = new Date().toISOString();
+  return {
+    id: 'log-init-001',
+    timestamp: now,
+    category: 'security',
+    action: '日誌系統啟動',
+    level: 'info',
+    actor: {
+      username: 'System',
+      displayName: '系統安全核心',
+      role: 'admin',
+    },
+    target: 'AuditLogger',
+    details: '系統日誌服務與完整性 Hash 雜湊保護機制已就緒，並已串接雲端 Firestore 資料庫。',
+    hash: computeHash('INIT_ROOT_HASH::' + now),
+  };
+}
+
 /**
- * Loads audit logs from storage.
+ * Loads audit logs from storage with cryptographic integrity verification.
  */
 export function loadAuditLogs(): AuditLogEntry[] {
   try {
-    const raw = localStorage.getItem(AUDIT_LOGS_STORAGE_KEY);
-    if (!raw) {
-      // Seed an initial system bootstrap log
-      const initial: AuditLogEntry = {
-        id: 'log-init-001',
+    const bootstrap = createBootstrapLog();
+    let tamperDetails: string | null = null;
+
+    const logs = loadWithIntegrity<AuditLogEntry[]>(
+      AUDIT_LOGS_STORAGE_KEY,
+      [bootstrap],
+      (details) => {
+        tamperDetails = details;
+      }
+    );
+
+    if (tamperDetails) {
+      const tamperEntry: AuditLogEntry = {
+        id: `log-${Date.now()}-tamper`,
         timestamp: new Date().toISOString(),
         category: 'security',
-        action: '日誌系統啟動',
-        level: 'info',
+        action: '日誌完整性修復',
+        level: 'security',
         actor: {
           username: 'System',
-          displayName: '系統安全核心',
+          displayName: '安全保護引擎',
           role: 'admin',
         },
-        target: 'AuditLogger',
-        details: '系統日誌服務與完整性 Hash 雜湊保護機制已就緒，並已串接雲端 Firestore 資料庫。',
-        hash: computeHash('INIT_ROOT_HASH::' + new Date().toISOString()),
+        target: AUDIT_LOGS_STORAGE_KEY,
+        details: tamperDetails,
+        hash: computeHash(`TAMPER_RECOVERED::${Date.now()}`),
       };
-      saveAuditLogs([initial]);
-      // Also push initial seed to cloud
-      saveAuditLogToCloud(initial).catch(() => {});
-      return [initial];
+      const updated = [tamperEntry, ...logs].slice(0, MAX_LOGS);
+      saveAuditLogs(updated);
+      saveAuditLogToCloud(tamperEntry).catch(() => {});
+      return updated;
     }
-    return JSON.parse(raw);
+
+    return Array.isArray(logs) ? logs : [bootstrap];
   } catch (err) {
     console.error('Failed to load audit logs:', err);
     return [];
@@ -41,16 +70,11 @@ export function loadAuditLogs(): AuditLogEntry[] {
 }
 
 /**
- * Saves audit logs with hash protection.
+ * Saves audit logs with hash integrity protection.
  */
 function saveAuditLogs(logs: AuditLogEntry[]): void {
-  try {
-    // Keep max logs to prevent storage exhaustion
-    const sliced = logs.slice(0, MAX_LOGS);
-    localStorage.setItem(AUDIT_LOGS_STORAGE_KEY, JSON.stringify(sliced));
-  } catch (err) {
-    console.error('Failed to save audit logs:', err);
-  }
+  const sliced = logs.slice(0, MAX_LOGS);
+  saveWithIntegrity(AUDIT_LOGS_STORAGE_KEY, sliced);
 }
 
 /**

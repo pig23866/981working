@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Lock,
   User,
@@ -10,8 +10,7 @@ import {
   Sun,
   Moon,
 } from 'lucide-react';
-import { loginUser, syncUsersFromCloud, ensureSeedUsersSyncedToCloud } from '../lib/auth';
-import { subscribeToUsers, fetchUsersFromCloud } from '../lib/firebase';
+import { loginUserAsync } from '../lib/auth';
 import { SessionUser } from '../types';
 import { playChime } from '../lib/notifications';
 
@@ -32,36 +31,12 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    // Ensure all 14 official student accounts and Admin are properly uploaded to Cloud Firestore
-    ensureSeedUsersSyncedToCloud().catch(() => {});
-
-    // Live synchronization with Firestore users collection
-    const unsubscribe = subscribeToUsers((cloudUsers) => {
-      syncUsersFromCloud(cloudUsers);
-    });
-    return () => unsubscribe();
-  }, []);
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setIsLoading(true);
 
-    let result = loginUser(username, password);
-
-    // If initial check fails, fetch fresh cloud users once in case of recent update
-    if (!result.success) {
-      try {
-        const cloudUsers = await fetchUsersFromCloud();
-        if (cloudUsers.length > 0) {
-          syncUsersFromCloud(cloudUsers);
-          result = loginUser(username, password);
-        }
-      } catch (err) {
-        console.warn('Cloud user refresh notice:', err);
-      }
-    }
+    const result = await loginUserAsync(username, password);
 
     setIsLoading(false);
 
@@ -115,15 +90,17 @@ export const LoginView: React.FC<LoginViewProps> = ({
         {/* Login Form */}
         <form onSubmit={handleLogin} className="space-y-4 sm:space-y-5">
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+            <label htmlFor="login-username" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
               帳號
             </label>
             <div className="relative">
               <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 id="login-username"
+                name="username"
                 type="text"
                 required
+                autoComplete="username"
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck="false"
@@ -136,15 +113,17 @@ export const LoginView: React.FC<LoginViewProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+            <label htmlFor="login-password" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
               密碼
             </label>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 id="login-password"
+                name="password"
                 type={showPassword ? 'text' : 'password'}
                 required
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="請輸入密碼"

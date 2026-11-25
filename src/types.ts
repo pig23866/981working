@@ -16,6 +16,8 @@ export type AssignmentStatus = 'todo' | 'in_progress' | 'completed' | 'submitted
 
 export type SubmissionType = 'classroom' | 'online' | 'paper' | 'email' | 'presentation' | 'other';
 
+export type AssignmentScope = 'class' | 'personal';
+
 export interface Subtask {
   id: string;
   title: string;
@@ -48,6 +50,9 @@ export interface Assignment {
   reminderMinutesBefore?: number;
   reminderTriggered?: boolean;
   notes?: string;
+  scope?: AssignmentScope; // 'class' = 全班作業(同步所有人), 'personal' = 個人作業(僅本人可見)
+  ownerUsername?: string; // 當 scope === 'personal' 時之擁有者帳號 (lowercase)
+  createdBy?: string; // 建立者顯示名稱
   createdAt: string;
   updatedAt: string;
 }

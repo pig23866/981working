@@ -9,6 +9,7 @@ interface BoardViewProps {
   subjects: Subject[];
   userProgressMap?: Map<string, AssignmentProgress>;
   currentUserRole?: UserRole;
+  currentUsername?: string;
   completedCountMap?: Record<string, number>;
   totalStudentsCount?: number;
   onOpenProgressModal?: (assignment: Assignment) => void;
@@ -31,6 +32,7 @@ export const BoardView: React.FC<BoardViewProps> = ({
   subjects,
   userProgressMap,
   currentUserRole,
+  currentUsername,
   completedCountMap,
   totalStudentsCount,
   onOpenProgressModal,
@@ -91,6 +93,7 @@ export const BoardView: React.FC<BoardViewProps> = ({
                     subject={subjectMap.get(asg.subjectId)}
                     userProgress={userProgressMap?.get(asg.id)}
                     currentUserRole={currentUserRole}
+                    currentUsername={currentUsername}
                     completedCount={completedCountMap ? completedCountMap[asg.id] : undefined}
                     totalStudentsCount={totalStudentsCount}
                     onOpenProgressModal={onOpenProgressModal ? () => onOpenProgressModal(asg) : undefined}

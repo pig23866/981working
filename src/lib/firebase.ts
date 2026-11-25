@@ -3,6 +3,7 @@ import {
   getFirestore,
   collection,
   doc,
+  getDoc,
   setDoc,
   deleteDoc,
   onSnapshot,
@@ -39,8 +40,7 @@ export async function testFirestoreConnection(): Promise<boolean> {
   }
 }
 
-// Auto-run test connection on module load
-testFirestoreConnection();
+// Auto-run test connection is triggered on demand after authentication to avoid unauthenticated startup traffic
 
 // ==========================================
 // 1. Assignments Cloud Sync (作業雲端同步模組)
@@ -105,6 +105,9 @@ export async function saveAssignmentToCloud(assignment: Assignment): Promise<voi
     const docRef = doc(db, ASSIGNMENTS_COLLECTION, assignment.id);
     const sanitized = removeUndefinedFields({
       ...assignment,
+      scope: assignment.scope === 'personal' ? 'personal' : 'class',
+      ownerUsername: assignment.scope === 'personal' ? (assignment.ownerUsername || '').toLowerCase() : '',
+      createdBy: assignment.createdBy || '',
       description: assignment.description || '',
       notes: assignment.notes || '',
       subtasks: assignment.subtasks || [],
@@ -125,7 +128,7 @@ export async function deleteAssignmentFromCloud(id: string): Promise<void> {
 }
 
 /**
- * 清空雲端所有作業清單
+ * 清空雲端所有「全班作業」清單（保留各學生私人作業）
  */
 export async function clearAllAssignmentsInCloud(): Promise<void> {
   const colRef = collection(db, ASSIGNMENTS_COLLECTION);
@@ -133,10 +136,17 @@ export async function clearAllAssignmentsInCloud(): Promise<void> {
   if (snapshot.empty) return;
 
   const batch = writeBatch(db);
+  let deleteCount = 0;
   snapshot.docs.forEach((docSnap) => {
-    batch.delete(docSnap.ref);
+    const data = docSnap.data() as Assignment;
+    if (data.scope !== 'personal') {
+      batch.delete(docSnap.ref);
+      deleteCount++;
+    }
   });
-  await batch.commit();
+  if (deleteCount > 0) {
+    await batch.commit();
+  }
 }
 
 // ==========================================
@@ -424,6 +434,34 @@ export function subscribeToUsers(
 }
 
 /**
+ * 依單一帳號查詢雲端使用者（登入驗證專用，避免未登入前拉取全體帳號）
+ */
+export async function fetchUserByUsernameFromCloud(username: string): Promise<AppUser | null> {
+  const clean = username.trim();
+  if (!clean) return null;
+
+  const candidates = Array.from(
+    new Set([
+      clean,
+      clean.toLowerCase(),
+      clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase(),
+    ])
+  );
+
+  for (const candidate of candidates) {
+    try {
+      const snap = await getDoc(doc(db, USERS_COLLECTION, candidate));
+      if (snap.exists()) {
+        return snap.data() as AppUser;
+      }
+    } catch (err) {
+      console.warn(`Failed to fetch user ${candidate} from Firestore:`, err);
+    }
+  }
+  return null;
+}
+
+/**
  * 主動從雲端拉取所有使用者帳號
  */
 export async function fetchUsersFromCloud(): Promise<AppUser[]> {
@@ -579,18 +617,18 @@ export async function deleteAssignmentProgressForAssignment(assignmentId: string
 // ==========================================
 
 /**
- * 手動主動強制從雲端拉取最新作業、課表、日誌、帳號與進度資料
+ * 手動主動強制從雲端拉取最新作業、課表與（依角色授權之）日誌、帳號與進度資料
  */
-export async function manualSyncAllData(): Promise<{
+export async function manualSyncAllData(requester?: {
+  role: 'admin' | 'user';
+  username: string;
+}): Promise<{
   assignments: Assignment[];
   courses: CourseEntry[];
   logs: AuditLogEntry[];
   users: AppUser[];
   progresses: AssignmentProgress[];
 }> {
-  // Test connection first
-  await testFirestoreConnection();
-
   // Fetch assignments
   const assignSnapshot = await getDocs(collection(db, ASSIGNMENTS_COLLECTION));
   const assignments: Assignment[] = [];
@@ -607,14 +645,29 @@ export async function manualSyncAllData(): Promise<{
   });
   courses.sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.period - b.period);
 
-  // Fetch logs
-  const logs = await fetchAuditLogsFromCloud();
+  const isAdmin = !requester || requester.role === 'admin';
 
-  // Fetch users
-  const users = await fetchUsersFromCloud();
+  // Only admins fetch audit logs, user list, and full class progress
+  const logs = isAdmin ? await fetchAuditLogsFromCloud() : [];
+  const users = isAdmin ? await fetchUsersFromCloud() : [];
 
-  // Fetch progress
-  const progresses = await fetchAllProgressFromCloud();
+  let progresses: AssignmentProgress[] = [];
+  if (isAdmin) {
+    progresses = await fetchAllProgressFromCloud();
+  } else if (requester?.username) {
+    try {
+      const q = query(
+        collection(db, PROGRESS_COLLECTION),
+        where('username', '==', requester.username.toLowerCase())
+      );
+      const snap = await getDocs(q);
+      snap.forEach((docSnap) => {
+        progresses.push(docSnap.data() as AssignmentProgress);
+      });
+    } catch (err) {
+      console.error('Failed to fetch user progress from Firestore:', err);
+    }
+  }
 
   return { assignments, courses, logs, users, progresses };
 }

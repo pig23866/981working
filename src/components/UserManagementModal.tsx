@@ -24,6 +24,7 @@ import {
   changePassword,
   syncUsersWithCloud,
   syncUsersFromCloud,
+  validatePasswordStrength,
 } from '../lib/auth';
 import { subscribeToUsers } from '../lib/firebase';
 import { playChime } from '../lib/notifications';
@@ -105,8 +106,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (newPassword.length < 4) {
-      setErrorMessage('密碼長度至少需要 4 碼');
+    const strengthError = validatePasswordStrength(newPassword);
+    if (strengthError) {
+      setErrorMessage(strengthError);
       return;
     }
 
@@ -181,8 +183,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (resetNewPassword.length < 4) {
-      setErrorMessage('新密碼長度至少需要 4 碼');
+    const strengthError = validatePasswordStrength(resetNewPassword);
+    if (strengthError) {
+      setErrorMessage(strengthError);
       return;
     }
     if (resetNewPassword !== resetConfirmPassword) {
@@ -384,7 +387,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       <div className="flex items-center gap-1.5">
                         <UserCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                         <span className="text-xs font-bold text-slate-900 dark:text-white">
-                          一般學員 (user)
+                          學生 (user)
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
@@ -648,7 +651,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                     : 'bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
                                 }`}
                               >
-                                {isUserAdmin ? '管理員' : '一般學員'}
+                                {isUserAdmin ? '管理員' : '學生'}
                               </span>
                               {isSelf && (
                                 <span className="text-[10px] text-slate-400 font-medium">

@@ -244,23 +244,39 @@ export function sanitizeCsvCell(value: unknown): string {
 
 /**
  * Generates a cryptographically secure random password using Web Crypto API (no Math.random).
+ * Guarantees at least one uppercase letter, one lowercase letter, and one digit.
  */
 export function generateSecurePassword(length = 10): string {
-  const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghijkmnpqrstuvwxyz';
+  const digits = '23456789';
+  const charset = upper + lower + digits;
   const targetLen = Math.max(8, length);
-  const maxValidByte = 256 - (256 % charset.length);
-  let result = '';
 
-  const buf = new Uint8Array(targetLen * 2);
-  while (result.length < targetLen) {
-    crypto.getRandomValues(buf);
-    for (let i = 0; i < buf.length && result.length < targetLen; i++) {
-      if (buf[i] < maxValidByte) {
-        result += charset.charAt(buf[i] % charset.length);
+  const pickChar = (pool: string): string => {
+    const maxValid = 256 - (256 % pool.length);
+    const buf = new Uint8Array(1);
+    while (true) {
+      crypto.getRandomValues(buf);
+      if (buf[0] < maxValid) {
+        return pool.charAt(buf[0] % pool.length);
       }
     }
+  };
+
+  const chars = [pickChar(upper), pickChar(lower), pickChar(digits)];
+  while (chars.length < targetLen) {
+    chars.push(pickChar(charset));
   }
-  return result;
+
+  // Cryptographic Fisher-Yates shuffle
+  const randBuf = new Uint32Array(chars.length);
+  crypto.getRandomValues(randBuf);
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randBuf[i] % (i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
 }
 
 /**

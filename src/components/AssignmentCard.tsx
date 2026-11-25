@@ -14,6 +14,7 @@ import {
   AlertCircle,
   CheckSquare,
   Square,
+  User,
   Users,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -28,6 +29,7 @@ interface AssignmentCardProps {
   subject?: Subject;
   userProgress?: AssignmentProgress;
   currentUserRole?: UserRole;
+  currentUsername?: string;
   completedCount?: number;
   totalStudentsCount?: number;
   onOpenProgressModal?: () => void;
@@ -42,6 +44,7 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
   subject,
   userProgress,
   currentUserRole,
+  currentUsername,
   completedCount,
   totalStudentsCount,
   onOpenProgressModal,
@@ -55,6 +58,14 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
   // Effective status is based on personal progress if available, otherwise default to 'todo'
   const currentStatus: AssignmentStatus = userProgress?.status || 'todo';
   const isAdmin = currentUserRole === 'admin';
+  const isPersonal = assignment.scope === 'personal';
+  const isOwner = Boolean(
+    currentUsername &&
+      assignment.ownerUsername &&
+      assignment.ownerUsername.toLowerCase() === currentUsername.toLowerCase()
+  );
+  const canEdit = isAdmin || (isPersonal && isOwner);
+  const canDelete = isAdmin || (isPersonal && isOwner);
 
   const urgency = getUrgencyInfo(assignment.deadline, currentStatus);
   const priorityInfo = PRIORITY_LABELS[assignment.priority];
@@ -120,55 +131,77 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
               <GraduationCap className="w-3 h-3" />
               {submissionInfo.label}
             </span>
+
+            {isPersonal ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/70 border border-teal-200 dark:border-teal-800 px-2 py-0.5 rounded-md">
+                <User className="w-3 h-3" />
+                個人作業
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 px-2 py-0.5 rounded-md">
+                <Users className="w-3 h-3" />
+                全班同步
+              </span>
+            )}
           </div>
 
           {/* Right Menu Button */}
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowMenu(!showMenu)}
-              className="btn-press p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-              aria-label="Options"
-            >
-              <MoreVertical className="w-4 h-4" />
-            </button>
+          {(canEdit || canDelete) && (
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowMenu(!showMenu)}
+                className="btn-press p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                aria-label="Options"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
 
-            {showMenu && (
-              <div className="absolute right-0 mt-1 w-32 bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-100 dark:border-slate-800 py-1 z-20 animate-in fade-in zoom-in-95 duration-150">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowMenu(false);
-                    onEdit(assignment);
-                  }}
-                  className="w-full px-3 py-1.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer text-left"
-                >
-                  <Edit2 className="w-3.5 h-3.5 text-slate-500" />
-                  編輯作業
-                </button>
-                <hr className="my-1 border-slate-100 dark:border-slate-800" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowMenu(false);
-                    onDelete(assignment.id);
-                  }}
-                  className="w-full px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 flex items-center gap-2 cursor-pointer text-left"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                  刪除作業
-                </button>
-              </div>
-            )}
-          </div>
+              {showMenu && (
+                <div className="absolute right-0 mt-1 w-32 bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-100 dark:border-slate-800 py-1 z-20 animate-in fade-in zoom-in-95 duration-150">
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMenu(false);
+                        onEdit(assignment);
+                      }}
+                      className="w-full px-3 py-1.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer text-left"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-slate-500" />
+                      編輯作業
+                    </button>
+                  )}
+                  {canDelete && (
+                    <>
+                      {canEdit && <hr className="my-1 border-slate-100 dark:border-slate-800" />}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowMenu(false);
+                          onDelete(assignment.id);
+                        }}
+                        className="w-full px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 flex items-center gap-2 cursor-pointer text-left"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                        刪除作業
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Title */}
         <h3
-          className={`text-base font-bold text-slate-900 dark:text-white leading-snug cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors ${
-            isDone ? 'line-through text-slate-400 dark:text-slate-500' : ''
-          }`}
-          onClick={() => onEdit(assignment)}
+          className={`text-base font-bold text-slate-900 dark:text-white leading-snug transition-colors ${
+            canEdit ? 'cursor-pointer hover:text-blue-600 dark:hover:text-blue-400' : ''
+          } ${isDone ? 'line-through text-slate-400 dark:text-slate-500' : ''}`}
+          onClick={() => {
+            if (canEdit) onEdit(assignment);
+          }}
         >
           {assignment.title}
         </h3>
@@ -199,8 +232,8 @@ export const AssignmentCard: React.FC<AssignmentCardProps> = ({
               {formatDateTimeDisplay(assignment.deadline)}
             </span>
 
-            {/* Admin only: completion count button to open student list modal */}
-            {isAdmin && onOpenProgressModal && (
+            {/* Admin only (class assignments): completion count button to open student list modal */}
+            {isAdmin && !isPersonal && onOpenProgressModal && (
               <button
                 type="button"
                 onClick={(e) => {

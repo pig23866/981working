@@ -21,6 +21,8 @@ interface SubjectFilterBarProps {
   onSearchChange: (q: string) => void;
   statusFilter: 'all' | 'pending' | 'done';
   onStatusFilterChange: (s: 'all' | 'pending' | 'done') => void;
+  scopeFilter: 'all' | 'class' | 'personal';
+  onScopeFilterChange: (s: 'all' | 'class' | 'personal') => void;
   viewMode: ViewMode;
   onViewModeChange: (m: ViewMode) => void;
   sortBy: 'deadline' | 'priority' | 'subject';
@@ -37,6 +39,8 @@ export const SubjectFilterBar: React.FC<SubjectFilterBarProps> = ({
   onSearchChange,
   statusFilter,
   onStatusFilterChange,
+  scopeFilter,
+  onScopeFilterChange,
   viewMode,
   onViewModeChange,
   sortBy,
@@ -135,6 +139,43 @@ export const SubjectFilterBar: React.FC<SubjectFilterBarProps> = ({
         {/* Right Side: Status Tabs, Sort Dropdown & View Mode Switcher */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-2 xl:pt-0 border-t xl:border-t-0 border-slate-100 dark:border-slate-800">
           <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+            {/* Scope Filter Tabs (全部 / 全班作業 / 個人作業) */}
+            <div className="inline-flex p-1 bg-slate-100/90 dark:bg-slate-800/90 rounded-xl border border-slate-200/60 dark:border-slate-700/60 shrink-0">
+              <button
+                type="button"
+                onClick={() => onScopeFilterChange('all')}
+                className={`btn-press px-2 py-1 text-xs font-medium rounded-lg transition-all duration-150 cursor-pointer ${
+                  scopeFilter === 'all'
+                    ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-2xs font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                全部類型
+              </button>
+              <button
+                type="button"
+                onClick={() => onScopeFilterChange('class')}
+                className={`btn-press px-2 py-1 text-xs font-medium rounded-lg transition-all duration-150 cursor-pointer ${
+                  scopeFilter === 'class'
+                    ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-2xs font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                全班
+              </button>
+              <button
+                type="button"
+                onClick={() => onScopeFilterChange('personal')}
+                className={`btn-press px-2 py-1 text-xs font-medium rounded-lg transition-all duration-150 cursor-pointer ${
+                  scopeFilter === 'personal'
+                    ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-2xs font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                個人
+              </button>
+            </div>
+
             {/* Status Tabs */}
             <div className="inline-flex p-1 bg-slate-100/90 dark:bg-slate-800/90 rounded-xl border border-slate-200/60 dark:border-slate-700/60 flex-1 sm:flex-initial justify-center sm:justify-start">
               <button

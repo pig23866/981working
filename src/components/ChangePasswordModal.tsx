@@ -11,7 +11,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { SessionUser } from '../types';
-import { changePassword, loadUsers } from '../lib/auth';
+import { changePassword, loadUsers, validatePasswordStrength } from '../lib/auth';
 import { playChime } from '../lib/notifications';
 import confetti from 'canvas-confetti';
 
@@ -47,8 +47,9 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (newPassword.length < 4) {
-      setErrorMessage('新密碼長度至少需要 4 碼');
+    const strengthError = validatePasswordStrength(newPassword);
+    if (strengthError) {
+      setErrorMessage(strengthError);
       return;
     }
 
@@ -106,7 +107,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white">修改安全密碼</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">請設定至少4碼之新密碼</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">請設定至少 8 碼且含英文字母與數字之新密碼</p>
             </div>
           </div>
           <button
@@ -137,7 +138,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
               >
                 {allUsers.map((u) => (
                   <option key={u.username} value={u.username}>
-                    {u.displayName} ({u.role === 'admin' ? '管理員' : '一般使用者'})
+                    {u.displayName} ({u.role === 'admin' ? '管理員' : '學生'})
                   </option>
                 ))}
               </select>
@@ -183,7 +184,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
                 required
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="請輸入新密碼 (至少4碼)"
+                placeholder="請輸入新密碼 (至少 8 碼，含英文與數字)"
                 className="w-full pl-10 pr-10 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900 dark:text-white"
               />
             </div>

@@ -79,6 +79,12 @@ function sanitizeAssignments(items: unknown[]): Assignment[] {
       driveAttachments: attachments,
       estimatedMinutes: typeof obj.estimatedMinutes === 'number' && Number.isFinite(obj.estimatedMinutes) ? obj.estimatedMinutes : 60,
       notes: typeof obj.notes === 'string' ? obj.notes.slice(0, 1000) : '',
+      scope: obj.scope === 'personal' ? 'personal' : 'class',
+      ownerUsername:
+        obj.scope === 'personal' && typeof obj.ownerUsername === 'string'
+          ? obj.ownerUsername.trim().toLowerCase().slice(0, 64)
+          : undefined,
+      createdBy: typeof obj.createdBy === 'string' ? obj.createdBy.trim().slice(0, 64) : undefined,
       createdAt: typeof obj.createdAt === 'string' ? obj.createdAt : nowIso,
       updatedAt: typeof obj.updatedAt === 'string' ? obj.updatedAt : nowIso,
     });

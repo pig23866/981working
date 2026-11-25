@@ -77,6 +77,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
   const scheduleInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
+  const isAdmin = currentUser.role === 'admin';
 
   // ---------------------------------------------------------
   // Handlers for Assignments Backup & Restore
@@ -135,7 +136,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
   };
 
   const handleConfirmRestoreAssignments = () => {
-    if (!assignmentPreview) return;
+    if (!assignmentPreview || !isAdmin) return;
     setIsProcessing(true);
 
     setTimeout(() => {
@@ -234,7 +235,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
   };
 
   const handleConfirmRestoreSchedule = () => {
-    if (!schedulePreview) return;
+    if (!schedulePreview || !isAdmin) return;
     setIsProcessing(true);
 
     setTimeout(() => {
@@ -264,6 +265,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
   };
 
   const handleResetToDefaultSchedule = () => {
+    if (!isAdmin) return;
     if (!window.confirm('確定要還原為預設標準課表嗎？此操作將覆蓋現有自訂課表設定。')) {
       return;
     }
@@ -400,6 +402,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
               </div>
 
               {/* Restore Box */}
+              {isAdmin ? (
               <div className="p-5 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 space-y-4">
                 <div>
                   <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -537,6 +540,11 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                   </div>
                 )}
               </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 text-xs text-slate-500 dark:text-slate-400">
+                  資料復原（覆蓋全班作業）僅限系統管理員操作；您仍可隨時匯出備份檔保存。
+                </div>
+              )}
             </div>
           ) : (
             /* TAB 2: Schedule Backup & Restore */
@@ -565,6 +573,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
               </div>
 
               {/* Restore Box */}
+              {isAdmin ? (
               <div className="p-5 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -656,6 +665,11 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                   </div>
                 )}
               </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 text-xs text-slate-500 dark:text-slate-400">
+                  課表復原與還原預設課表僅限系統管理員操作；您仍可隨時匯出課表備份檔保存。
+                </div>
+              )}
             </div>
           )}
         </div>

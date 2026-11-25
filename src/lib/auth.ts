@@ -5,9 +5,8 @@ import { logAuditEvent } from './auditLogger';
 import {
   saveUserToCloud,
   deleteUserFromCloud,
-  subscribeToUsers,
-  seedInitialUsersIfEmpty,
   fetchUsersFromCloud,
+  fetchUserByUsernameFromCloud,
 } from './firebase';
 
 const USERS_STORAGE_KEY = 'hw_auth_users_v2';
@@ -235,21 +234,7 @@ export async function pushAllLocalUsersToCloud(): Promise<{ uploaded: number; fa
   return { uploaded, failed };
 }
 
-// 系統啟動時自動嘗試雲端同步帳號資料庫 (若為空則種子初始化)
-(async () => {
-  try {
-    const cloudUsers = await fetchUsersFromCloud();
-    if (cloudUsers && cloudUsers.length > 0) {
-      syncUsersFromCloud(cloudUsers);
-    } else {
-      await seedInitialUsersIfEmpty(getInitialSeedUsers());
-      // 同步本地既有帳號至雲端
-      await pushAllLocalUsersToCloud();
-    }
-  } catch (err) {
-    console.warn('Startup cloud users synchronization notice:', err);
-  }
-})();
+// 注意：不在未登入前於模組載入時拉取雲端全體帳號清單，避免未授權預載洩漏。
 
 const ATTEMPTS_STORAGE_KEY = 'hw_auth_login_attempts_v2';
 const MAX_FAILED_ATTEMPTS = 5;
@@ -447,10 +432,152 @@ export function loginUser(
     action: '登入成功',
     level: 'info',
     actor: sessionUser,
-    details: `${sessionUser.role === 'admin' ? '系統管理員' : '一般學員'}「${sessionUser.displayName}」成功登入系統。`,
+    details: `${sessionUser.role === 'admin' ? '系統管理員' : '學生'}「${sessionUser.displayName}」成功登入系統。`,
   });
 
   return { success: true, user: sessionUser };
+}
+
+/**
+ * 單一帳號雲端優先登入驗證（不拉取全體帳號清單至本地 localStorage，防止未登入資料洩漏）
+ */
+export async function loginUserAsync(
+  usernameInput: string,
+  passwordInput: string
+): Promise<{ success: boolean; user?: SessionUser; error?: string }> {
+  const cleanUsername = usernameInput.trim();
+  if (!cleanUsername) {
+    return { success: false, error: '請輸入帳號' };
+  }
+  if (!passwordInput) {
+    return { success: false, error: '請輸入密碼' };
+  }
+
+  // 1. Check Brute-Force Account Lockout
+  const lockout = checkAccountLockout(cleanUsername);
+  if (lockout.isLocked) {
+    logAuditEvent({
+      category: 'security',
+      action: '防暴力破解攔截',
+      level: 'security',
+      actor: { username: cleanUsername, displayName: '未知連線', role: 'user' },
+      details: `帳號「${cleanUsername}」已被安全系統鎖定，已自動阻擋登入請求 (剩餘 ${lockout.remainingMinutes} 分鐘)。`,
+    });
+    return {
+      success: false,
+      error: `該帳號因連續密碼錯誤次數過多已被安全鎖定，請於 ${lockout.remainingMinutes} 分鐘後再試。`,
+    };
+  }
+
+  // 2. Fetch ONLY this single username from Firestore (fallback to cached/seed if offline)
+  let found: AppUser | null = await fetchUserByUsernameFromCloud(cleanUsername);
+  if (!found) {
+    if (localStorage.getItem(USERS_STORAGE_KEY)) {
+      const localUsers = loadUsers();
+      found =
+        localUsers.find((u) => u.username.toLowerCase() === cleanUsername.toLowerCase()) || null;
+    } else {
+      const seeds = getInitialSeedUsers();
+      found = seeds.find((u) => u.username.toLowerCase() === cleanUsername.toLowerCase()) || null;
+    }
+  }
+
+  if (!found) {
+    recordFailedAttempt(cleanUsername);
+    logAuditEvent({
+      category: 'auth',
+      action: '登入失敗 (帳號不存在)',
+      level: 'warn',
+      actor: { username: cleanUsername, displayName: '未知使用者', role: 'user' },
+      details: `嘗試登入未登記之帳號「${cleanUsername}」。`,
+    });
+    return { success: false, error: '帳號不存在，請確認輸入是否正確' };
+  }
+
+  // 3. Verify password with bcrypt
+  const isMatch = verifyPassword(passwordInput, found.passwordHash);
+  if (!isMatch) {
+    const attempt = recordFailedAttempt(found.username);
+    if (attempt.isLocked) {
+      logAuditEvent({
+        category: 'security',
+        action: '觸發防暴力破解鎖定',
+        level: 'security',
+        actor: { username: found.username, displayName: found.displayName, role: found.role },
+        details: `帳號「${found.username}」連續輸入密碼錯誤達到 ${MAX_FAILED_ATTEMPTS} 次，系統已自動鎖定該帳號 15 分鐘。`,
+      });
+      return {
+        success: false,
+        error: `連續密碼錯誤達 ${MAX_FAILED_ATTEMPTS} 次！為防範密碼暴力破解，該帳號已啟動安全保護鎖定 15 分鐘。`,
+      };
+    }
+
+    logAuditEvent({
+      category: 'auth',
+      action: '登入失敗 (密碼錯誤)',
+      level: 'warn',
+      actor: { username: found.username, displayName: found.displayName, role: found.role },
+      details: `帳號「${found.username}」密碼驗證不符 (剩餘 ${attempt.remainingAttempts} 次機會)。`,
+    });
+
+    return {
+      success: false,
+      error: `密碼錯誤，請重新輸入 (剩餘 ${attempt.remainingAttempts} 次嘗試機會，超過將鎖定帳號 15 分鐘)`,
+    };
+  }
+
+  // 4. Login success
+  resetFailedAttempts(found.username);
+
+  const officialSeed = OFFICIAL_STUDENT_SEEDS.find(
+    (s) => s.username.toLowerCase() === found!.username.toLowerCase()
+  );
+  const resolvedDisplayName = officialSeed ? officialSeed.displayName : found.displayName;
+
+  const updatedUser: AppUser = {
+    ...found,
+    displayName: resolvedDisplayName,
+    lastLoginAt: new Date().toISOString(),
+  };
+  saveUserToCloud(updatedUser).catch(() => {});
+
+  const sessionUser: SessionUser = {
+    username: updatedUser.username,
+    displayName: updatedUser.displayName,
+    role: updatedUser.role,
+    expiresAt: Date.now() + SESSION_TTL_MS,
+  };
+
+  saveCurrentSession(sessionUser);
+
+  logAuditEvent({
+    category: 'auth',
+    action: '登入成功',
+    level: 'info',
+    actor: sessionUser,
+    details: `${sessionUser.role === 'admin' ? '系統管理員' : '學生'}「${sessionUser.displayName}」成功登入系統。`,
+  });
+
+  return { success: true, user: sessionUser };
+}
+
+export function validatePasswordStrength(password: string): string | null {
+  if (!password || password.length < 8) {
+    return '密碼長度至少需要 8 碼';
+  }
+  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+    return '密碼需同時包含英文字母與數字';
+  }
+  return null;
+}
+
+function isVerifiedAdmin(operatorActor?: SessionUser): boolean {
+  if (!operatorActor || operatorActor.role !== 'admin') return false;
+  const users = loadUsers();
+  const matched = users.find(
+    (u) => u.username.toLowerCase() === operatorActor.username.toLowerCase()
+  );
+  return Boolean(matched && matched.role === 'admin');
 }
 
 // Change password for a user
@@ -461,8 +588,21 @@ export function changePassword(
   isAdminOverride = false,
   operatorActor?: SessionUser
 ): { success: boolean; error?: string } {
-  if (!newPassword || newPassword.length < 4) {
-    return { success: false, error: '新密碼長度至少需要 4 碼' };
+  if (isAdminOverride && !isVerifiedAdmin(operatorActor)) {
+    logAuditEvent({
+      category: 'security',
+      action: '越權重設密碼攔截',
+      level: 'security',
+      actor: operatorActor || { username: 'Unknown', displayName: '未授權操作', role: 'user' },
+      target: username,
+      details: `非管理員身分嘗試重設「${username}」密碼，已被安全模組阻擋。`,
+    });
+    return { success: false, error: '權限不足：僅系統管理員可重設他人密碼' };
+  }
+
+  const strengthError = validatePasswordStrength(newPassword);
+  if (strengthError) {
+    return { success: false, error: strengthError };
   }
 
   const users = loadUsers();
@@ -521,6 +661,18 @@ export function createUser(
   },
   operatorActor?: SessionUser
 ): { success: boolean; error?: string; user?: AppUser } {
+  if (!isVerifiedAdmin(operatorActor)) {
+    logAuditEvent({
+      category: 'security',
+      action: '越權建立帳號攔截',
+      level: 'security',
+      actor: operatorActor || { username: 'Unknown', displayName: '未授權操作', role: 'user' },
+      target: params.username,
+      details: `非管理員身分嘗試建立帳號「${params.username}」，已被安全模組阻擋。`,
+    });
+    return { success: false, error: '權限不足：僅系統管理員可建立帳號' };
+  }
+
   const username = params.username.trim();
   const displayName = params.displayName.trim();
   const password = params.password;
@@ -538,8 +690,9 @@ export function createUser(
   if (!displayName) {
     return { success: false, error: '請輸入姓名或稱謂' };
   }
-  if (!password || password.length < 4) {
-    return { success: false, error: '密碼長度至少需要 4 碼' };
+  const strengthError = validatePasswordStrength(password);
+  if (strengthError) {
+    return { success: false, error: strengthError };
   }
 
   const users = loadUsers();
@@ -571,7 +724,7 @@ export function createUser(
     level: 'info',
     actor: operatorActor || { username: 'Admin', displayName: '管理員', role: 'admin' },
     target: username,
-    details: `建立了新帳號「${displayName} (${username})」，身分：${role === 'admin' ? '系統管理員' : '一般學員'}，密碼已以 bcrypt 雜湊。`,
+    details: `建立了新帳號「${displayName} (${username})」，身分：${role === 'admin' ? '系統管理員' : '學生'}，密碼已以 bcrypt 雜湊。`,
   });
 
   return { success: true, user: newUser };
@@ -583,6 +736,18 @@ export function deleteUser(
   currentAdminUsername: string,
   operatorActor?: SessionUser
 ): { success: boolean; error?: string } {
+  if (!isVerifiedAdmin(operatorActor)) {
+    logAuditEvent({
+      category: 'security',
+      action: '越權刪除帳號攔截',
+      level: 'security',
+      actor: operatorActor || { username: 'Unknown', displayName: '未授權操作', role: 'user' },
+      target: usernameToDelete,
+      details: `非管理員身分嘗試刪除帳號「${usernameToDelete}」，已被安全模組阻擋。`,
+    });
+    return { success: false, error: '權限不足：僅系統管理員可刪除帳號' };
+  }
+
   const target = usernameToDelete.trim();
   if (!target) {
     return { success: false, error: '請指定欲刪除之帳號' };
@@ -656,19 +821,28 @@ export function loadCurrentSession(): SessionUser | null {
       return null;
     }
 
-    const users = loadUsers();
-    const matchedUser = users.find(
-      (u) => u.username.toLowerCase() === session.username.toLowerCase()
-    );
-    if (!matchedUser) {
-      removeWithIntegrity(SESSION_STORAGE_KEY);
-      return null;
+    if (localStorage.getItem(USERS_STORAGE_KEY)) {
+      const users = loadUsers();
+      const matchedUser = users.find(
+        (u) => u.username.toLowerCase() === session.username.toLowerCase()
+      );
+      if (!matchedUser) {
+        removeWithIntegrity(SESSION_STORAGE_KEY);
+        return null;
+      }
+
+      return {
+        username: matchedUser.username,
+        displayName: matchedUser.displayName,
+        role: matchedUser.role,
+        expiresAt: session.expiresAt,
+      };
     }
 
     return {
-      username: matchedUser.username,
-      displayName: matchedUser.displayName,
-      role: matchedUser.role,
+      username: session.username,
+      displayName: session.displayName,
+      role: session.role === 'admin' ? 'admin' : 'user',
       expiresAt: session.expiresAt,
     };
   } catch (e) {
@@ -710,8 +884,12 @@ export function refreshSessionActivity(): SessionUser | null {
   return refreshed;
 }
 
-// Logout session
+// Logout session and clear cached sensitive data from localStorage
 export function logoutSession(): void {
   saveCurrentSession(null);
+  removeWithIntegrity(USERS_STORAGE_KEY);
+  removeWithIntegrity('hw_tracker_assignments_v2');
+  removeWithIntegrity('hw_tracker_schedule_courses_v1');
+  removeWithIntegrity('hw_tracker_subjects_v2');
 }
 

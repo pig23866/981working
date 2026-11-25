@@ -13,7 +13,6 @@ import { DEFAULT_SUBJECTS } from './lib/constants';
 import {
   loadStoredAssignments,
   saveStoredAssignments,
-  clearAllStoredAssignments,
   loadStoredSubjects,
   saveStoredSubjects,
 } from './lib/storage';
@@ -73,8 +72,24 @@ import { ClassProgressOverviewModal } from './components/ClassProgressOverviewMo
 import {
   Inbox,
   Plus,
-  BookOpen,
 } from 'lucide-react';
+
+function filterVisibleAssignments(items: Assignment[], user: SessionUser | null): Assignment[] {
+  if (!user) return [];
+  const myUsername = user.username.toLowerCase();
+  return items.filter((asg) => {
+    if (asg.scope === 'personal') {
+      return (asg.ownerUsername || '').toLowerCase() === myUsername;
+    }
+    return true;
+  });
+}
+
+function canModifyAssignment(asg: Assignment, user: SessionUser | null): boolean {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  return asg.scope === 'personal' && (asg.ownerUsername || '').toLowerCase() === user.username.toLowerCase();
+}
 
 export default function App() {
   // Theme State (Dark mode toggle support via CSS & Tailwind)
@@ -101,19 +116,28 @@ export default function App() {
   const [isAuditLogModalOpen, setIsAuditLogModalOpen] = useState(false);
   const [isBackupRestoreModalOpen, setIsBackupRestoreModalOpen] = useState(false);
 
-  // Assignments & Subjects state
-  const [assignments, setAssignments] = useState<Assignment[]>(() => loadStoredAssignments());
-  const [subjects, setSubjects] = useState<Subject[]>(() => loadStoredSubjects());
-  const [courses, setCourses] = useState<CourseEntry[]>(() => loadStoredSchedule());
+  // Assignments & Subjects state (未登入前不讀取任何本機敏感快取，避免未驗證資料外洩)
+  const [assignments, setAssignments] = useState<Assignment[]>(() =>
+    currentUser ? filterVisibleAssignments(loadStoredAssignments(), currentUser) : []
+  );
+  const [subjects, setSubjects] = useState<Subject[]>(() =>
+    currentUser ? loadStoredSubjects() : DEFAULT_SUBJECTS
+  );
+  const [courses, setCourses] = useState<CourseEntry[]>(() =>
+    currentUser ? loadStoredSchedule() : []
+  );
 
-  // Personal Assignment Progress & Users state (全班題目共用，個人獨立完成進度)
-  const [allUsers, setAllUsers] = useState<AppUser[]>(() => loadUsers());
+  // Personal Assignment Progress & Users state (全班題目共用，個人獨立完成進度；僅管理員載入帳號清單)
+  const [allUsers, setAllUsers] = useState<AppUser[]>(() =>
+    currentUser && currentUser.role === 'admin' ? loadUsers() : []
+  );
   const [progressList, setProgressList] = useState<AssignmentProgress[]>([]);
 
   // Filter & View State
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'done'>('all');
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'class' | 'personal'>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [sortBy, setSortBy] = useState<'deadline' | 'priority' | 'subject'>('deadline');
   const [isUrgentFilterActive, setIsUrgentFilterActive] = useState(false);
@@ -152,36 +176,51 @@ export default function App() {
     onConfirm: () => {},
   });
 
-  // Save assignments on change (localStorage cache)
+  // Save assignments on change (僅於已登入狀態下寫入本機快取)
   useEffect(() => {
+    if (!currentUser) return;
     saveStoredAssignments(assignments);
-  }, [assignments]);
+  }, [assignments, currentUser]);
 
   // Save subjects on change
   useEffect(() => {
+    if (!currentUser) return;
     saveStoredSubjects(subjects);
-  }, [subjects]);
+  }, [subjects, currentUser]);
 
   // Save courses on change
   useEffect(() => {
+    if (!currentUser) return;
     saveStoredSchedule(courses);
-  }, [courses]);
+  }, [courses, currentUser]);
 
-  // Real-time synchronization with Cloud Firestore (即時雲端同步)
+  // Real-time synchronization with Cloud Firestore (僅於登入成功後啟動即時雲端同步)
   useEffect(() => {
+    if (!currentUser) return;
+
+    // 登入後立即載入本機快取以加速畫面呈現，並嚴格過濾僅屬於自己的個人作業與全班作業
+    setAssignments(filterVisibleAssignments(loadStoredAssignments(), currentUser));
+    setSubjects(loadStoredSubjects());
+    setCourses(loadStoredSchedule());
+    if (currentUser.role === 'admin') {
+      setAllUsers(loadUsers());
+    } else {
+      setAllUsers([]);
+    }
+
     let hasLoadedCloudAssignments = false;
 
     const unsubscribeAssignments = subscribeToAssignments(
       (cloudAssignments) => {
+        const visibleAssignments = filterVisibleAssignments(cloudAssignments, currentUser);
         if (!hasLoadedCloudAssignments) {
           hasLoadedCloudAssignments = true;
-          // If cloud already has assignments, load them
           if (cloudAssignments.length > 0) {
-            setAssignments(cloudAssignments);
-            saveStoredAssignments(cloudAssignments);
-          } else {
-            // First time seeding: if local has existing assignments, upload them to cloud
-            const local = loadStoredAssignments();
+            setAssignments(visibleAssignments);
+            saveStoredAssignments(visibleAssignments);
+          } else if (currentUser.role === 'admin') {
+            // First time seeding (管理員首次同步本地資料)
+            const local = filterVisibleAssignments(loadStoredAssignments(), currentUser);
             if (local.length > 0) {
               local.forEach((asg) => {
                 saveAssignmentToCloud(asg).catch(() => {});
@@ -189,8 +228,8 @@ export default function App() {
             }
           }
         } else {
-          setAssignments(cloudAssignments);
-          saveStoredAssignments(cloudAssignments);
+          setAssignments(visibleAssignments);
+          saveStoredAssignments(visibleAssignments);
         }
       },
       (err) => {
@@ -210,30 +249,32 @@ export default function App() {
       }
     );
 
-    // Ensure all 14 official student accounts and Admin are properly uploaded to Cloud Firestore
-    ensureSeedUsersSyncedToCloud().catch((err) => {
-      console.warn('Initial seed users upload notice:', err);
-    });
+    // 最小權限原則：僅系統管理員需要同步與監聽全班帳號清單，學生端絕不拉取他人帳號資料
+    let unsubscribeUsers: (() => void) | null = null;
+    if (currentUser.role === 'admin') {
+      ensureSeedUsersSyncedToCloud().catch((err) => {
+        console.warn('Initial seed users upload notice:', err);
+      });
 
-    // Live synchronization with Firestore user accounts collection (帳號資料庫即時同步)
-    const unsubscribeUsers = subscribeToUsers(
-      (cloudUsers) => {
-        if (cloudUsers && cloudUsers.length > 0) {
-          syncUsersFromCloud(cloudUsers);
-          setAllUsers(cloudUsers);
+      unsubscribeUsers = subscribeToUsers(
+        (cloudUsers) => {
+          if (cloudUsers && cloudUsers.length > 0) {
+            syncUsersFromCloud(cloudUsers);
+            setAllUsers(cloudUsers);
+          }
+        },
+        (err) => {
+          console.warn('Real-time users sync notice:', err);
         }
-      },
-      (err) => {
-        console.warn('Real-time users sync notice:', err);
-      }
-    );
+      );
+    }
 
     return () => {
       unsubscribeAssignments();
       unsubscribeSchedule();
-      unsubscribeUsers();
+      if (unsubscribeUsers) unsubscribeUsers();
     };
-  }, []);
+  }, [currentUser]);
 
   // Auto-refresh active session user displayName if official seed name changed (例如 98210 替代為 葉恩齊)
   useEffect(() => {
@@ -298,7 +339,7 @@ export default function App() {
       );
       return () => unsubscribe();
     } else {
-      // 一般學員：只監聽個人的繳交進度（保護同儕隱私，不對學員公開他人進度）
+      // 學生：只監聽個人的繳交進度（保護同儕隱私，不對學生公開他人進度）
       const unsubscribe = subscribeToUserProgress(
         currentUser.username,
         (userProgresses) => {
@@ -386,11 +427,23 @@ export default function App() {
     return new Map(subjects.map((s) => [s.id, s]));
   }, [subjects]);
 
-  // Filtered & Sorted Assignments (個人獨立篩選：待辦/完成依使用者各自進度過濾)
+  // 全班作業清單（管理員總表僅統計全班同步作業，不包含個人作業）
+  const classAssignments = useMemo(() => {
+    return assignments.filter((a) => a.scope !== 'personal');
+  }, [assignments]);
+
+  // Filtered & Sorted Assignments (個人獨立篩選：待辦/完成依使用者各自進度過濾，支援全班/個人作業篩選)
   const filteredAssignments = useMemo(() => {
     return assignments
       .filter((asg) => {
         if (selectedSubjectId && asg.subjectId !== selectedSubjectId) {
+          return false;
+        }
+
+        if (scopeFilter === 'class' && asg.scope === 'personal') {
+          return false;
+        }
+        if (scopeFilter === 'personal' && asg.scope !== 'personal') {
           return false;
         }
 
@@ -444,51 +497,129 @@ export default function App() {
 
         return 0;
       });
-  }, [assignments, selectedSubjectId, statusFilter, isUrgentFilterActive, searchQuery, sortBy, currentUserProgressMap]);
+  }, [assignments, selectedSubjectId, scopeFilter, statusFilter, isUrgentFilterActive, searchQuery, sortBy, currentUserProgressMap]);
 
-  // Handlers for Assignment operations (自動同步至雲端 Firestore)
+  // Handlers for Assignment operations (個人作業僅本人可見，全班作業即時同步至所有人)
   const handleSaveAssignment = (assignmentToSave: Assignment) => {
-    const isEditing = assignments.some((a) => a.id === assignmentToSave.id);
+    if (!currentUser) return;
+
+    const existing = assignments.find((a) => a.id === assignmentToSave.id);
+    const isEditing = !!existing;
+
+    if (isEditing && !canModifyAssignment(existing, currentUser)) {
+      logAuditEvent({
+        category: 'security',
+        action: '越權編輯作業攔截',
+        level: 'security',
+        actor: currentUser,
+        target: existing.title,
+        details: `學生「${currentUser.displayName}」嘗試編輯非本人擁有的全班作業，已被系統阻擋。`,
+      });
+      setConfirmConfig({
+        isOpen: true,
+        title: '權限不足',
+        message: '修改已發布的全班作業僅限系統管理員操作；您僅可編輯自己建立的個人作業。',
+        isDestructive: false,
+        onConfirm: () => setConfirmConfig((c) => ({ ...c, isOpen: false })),
+      });
+      setEditingAssignment(null);
+      return;
+    }
+
+    const normalizedScope = assignmentToSave.scope === 'personal' ? 'personal' : 'class';
+    const normalizedAssignment: Assignment = {
+      ...assignmentToSave,
+      scope: normalizedScope,
+      ownerUsername:
+        normalizedScope === 'personal'
+          ? (isEditing && existing?.ownerUsername && currentUser.role === 'admin'
+              ? existing.ownerUsername
+              : currentUser.username.toLowerCase())
+          : undefined,
+      createdBy: assignmentToSave.createdBy || existing?.createdBy || currentUser.username,
+    };
 
     // Instant local state update
     setAssignments((prev) => {
-      const index = prev.findIndex((a) => a.id === assignmentToSave.id);
+      const index = prev.findIndex((a) => a.id === normalizedAssignment.id);
       if (index >= 0) {
         const updated = [...prev];
-        updated[index] = assignmentToSave;
+        updated[index] = normalizedAssignment;
         return updated;
       }
-      return [assignmentToSave, ...prev];
+      return [normalizedAssignment, ...prev];
     });
 
     // Cloud Firestore synchronization
-    saveAssignmentToCloud(assignmentToSave).catch((err) => {
+    saveAssignmentToCloud(normalizedAssignment).catch((err) => {
       console.error('Failed to sync assignment to Firestore:', err);
     });
 
-    if (currentUser) {
-      logAuditEvent({
-        category: 'assignment',
-        action: isEditing ? '編輯作業' : '新增作業',
-        actor: currentUser,
-        target: assignmentToSave.title,
-        details: isEditing
-          ? `更新了作業「${assignmentToSave.title}」之詳細內容或繳交期限。`
-          : `建立了新作業「${assignmentToSave.title}」，截止期限：${assignmentToSave.deadline}。`,
-      });
-    }
+    const scopeLabel = normalizedScope === 'personal' ? '個人作業' : '全班同步作業';
+    logAuditEvent({
+      category: 'assignment',
+      action: isEditing
+        ? '編輯作業'
+        : normalizedScope === 'personal'
+          ? '新增個人作業'
+          : '新增全班作業',
+      actor: currentUser,
+      target: normalizedAssignment.title,
+      details: isEditing
+        ? `更新了${scopeLabel}「${normalizedAssignment.title}」之詳細內容或繳交期限。`
+        : `建立了新的${scopeLabel}「${normalizedAssignment.title}」，截止期限：${normalizedAssignment.deadline}。`,
+    });
 
     setEditingAssignment(null);
   };
 
+  const handleOpenEditAssignment = (asg: Assignment) => {
+    if (!canModifyAssignment(asg, currentUser)) {
+      setConfirmConfig({
+        isOpen: true,
+        title: '僅供檢視',
+        message: '此為全班共用作業，僅限系統管理員編輯內容；您可直接於作業卡片勾選自己的完成進度。',
+        isDestructive: false,
+        onConfirm: () => setConfirmConfig((c) => ({ ...c, isOpen: false })),
+      });
+      return;
+    }
+    setEditingAssignment(asg);
+    setIsAssignmentModalOpen(true);
+  };
+
   const handleDeleteAssignment = (id: string) => {
+    if (!currentUser) return;
+
     const target = assignments.find((a) => a.id === id);
     if (!target) return;
 
+    if (!canModifyAssignment(target, currentUser)) {
+      logAuditEvent({
+        category: 'security',
+        action: '越權刪除作業攔截',
+        level: 'security',
+        actor: currentUser,
+        target: target.title,
+        details: `非管理員「${currentUser.displayName}」嘗試刪除全班作業，已被系統阻擋。`,
+      });
+      setConfirmConfig({
+        isOpen: true,
+        title: '權限不足',
+        message: '刪除全班共用作業僅限系統管理員操作；您僅可刪除自己建立的個人作業。',
+        isDestructive: false,
+        onConfirm: () => setConfirmConfig((c) => ({ ...c, isOpen: false })),
+      });
+      return;
+    }
+
+    const isPersonal = target.scope === 'personal';
     setConfirmConfig({
       isOpen: true,
-      title: '確認刪除作業？',
-      message: `確定要刪除「${target.title}」嗎？此操作將自統整系統中移除此作業紀錄與所有學員的完成進度。`,
+      title: isPersonal ? '確認刪除個人作業？' : '確認刪除全班作業？',
+      message: isPersonal
+        ? `確定要刪除個人作業「${target.title}」嗎？此操作僅會移除您個人的紀錄。`
+        : `確定要刪除全班作業「${target.title}」嗎？此操作將自統整系統中移除此作業紀錄與所有學生的完成進度。`,
       isDestructive: true,
       onConfirm: () => {
         setAssignments((prev) => prev.filter((a) => a.id !== id));
@@ -499,28 +630,48 @@ export default function App() {
           console.error('Failed to clean up assignment progress in Firestore:', err);
         });
 
-        if (currentUser) {
-          logAuditEvent({
-            category: 'assignment',
-            action: '刪除作業',
-            level: 'warn',
-            actor: currentUser,
-            target: target.title,
-            details: `刪除了作業「${target.title}」。`,
-          });
-        }
+        logAuditEvent({
+          category: 'assignment',
+          action: isPersonal ? '刪除個人作業' : '刪除全班作業',
+          level: 'warn',
+          actor: currentUser,
+          target: target.title,
+          details: `刪除了${isPersonal ? '個人作業' : '全班作業'}「${target.title}」。`,
+        });
         setConfirmConfig((c) => ({ ...c, isOpen: false }));
       },
     });
   };
 
-  // Clear all assignments (清空作業清單)
+  // Clear all class assignments (清空全班作業清單 - 僅限管理員，保留學生個人作業)
   const handleClearAllAssignments = () => {
-    if (assignments.length === 0) {
+    if (!currentUser || currentUser.role !== 'admin') {
+      if (currentUser) {
+        logAuditEvent({
+          category: 'security',
+          action: '越權清空作業攔截',
+          level: 'security',
+          actor: currentUser,
+          target: 'Assignments',
+          details: `非管理員「${currentUser.displayName}」嘗試清空全班作業清單，已被系統阻擋。`,
+        });
+      }
       setConfirmConfig({
         isOpen: true,
-        title: '作業清單目前已是空的',
-        message: '作業清單內目前無任何項目，您可以點擊「新增作業」建立新作業。',
+        title: '權限不足',
+        message: '清空全班作業清單僅限系統管理員操作。',
+        isDestructive: false,
+        onConfirm: () => setConfirmConfig((c) => ({ ...c, isOpen: false })),
+      });
+      return;
+    }
+
+    const classOnly = assignments.filter((a) => a.scope !== 'personal');
+    if (classOnly.length === 0) {
+      setConfirmConfig({
+        isOpen: true,
+        title: '全班作業清單目前已是空的',
+        message: '目前無任何全班作業項目，您可以點擊「新增作業」建立新作業。',
         isDestructive: false,
         onConfirm: () => {
           setConfirmConfig((c) => ({ ...c, isOpen: false }));
@@ -529,29 +680,26 @@ export default function App() {
       return;
     }
 
-    const count = assignments.length;
+    const count = classOnly.length;
     setConfirmConfig({
       isOpen: true,
-      title: '確認清空所有作業清單？',
-      message: `確定要清空目前全部 ${count} 筆作業嗎？清空後作業清單將還原為空白狀態。`,
+      title: '確認清空所有全班作業清單？',
+      message: `確定要清空目前全部 ${count} 筆全班作業嗎？清空後將保留各學生的個人私密作業，僅移除全班共用作業。`,
       isDestructive: true,
       onConfirm: () => {
-        clearAllStoredAssignments();
-        setAssignments([]);
+        setAssignments((prev) => prev.filter((a) => a.scope === 'personal'));
         setSelectedSubjectId(null);
         clearAllAssignmentsInCloud().catch((err) => {
           console.error('Failed to clear assignments in Firestore:', err);
         });
 
-        if (currentUser) {
-          logAuditEvent({
-            category: 'assignment',
-            action: '清空作業清單',
-            level: 'warn',
-            actor: currentUser,
-            details: `執行清空全部作業，共清除了 ${count} 筆作業項目。`,
-          });
-        }
+        logAuditEvent({
+          category: 'assignment',
+          action: '清空作業清單',
+          level: 'warn',
+          actor: currentUser,
+          details: `執行清空全班作業，共清除了 ${count} 筆全班作業項目（保留個人作業）。`,
+        });
         setConfirmConfig((c) => ({ ...c, isOpen: false }));
         playChime('info');
       },
@@ -648,7 +796,7 @@ export default function App() {
 
   const handleToggleSubtask = (assignmentId: string, subtaskId: string) => {
     const target = assignments.find((a) => a.id === assignmentId);
-    if (!target) return;
+    if (!target || !canModifyAssignment(target, currentUser)) return;
 
     const updatedAssignment: Assignment = {
       ...target,
@@ -703,45 +851,62 @@ export default function App() {
       });
     }
     logoutSession();
+    setAssignments([]);
+    setCourses([]);
+    setAllUsers([]);
+    setProgressList([]);
+    setSelectedSubjectId(null);
+    setScopeFilter('all');
+    setSearchQuery('');
+    setStatusFilter('all');
+    setIsUrgentFilterActive(false);
     setCurrentUser(null);
     playChime('info');
   };
 
-  // 手動主動強制從雲端拉取最新資料 (Refresh & Cloud Sync - 作業、課表、帳號資料庫與進度)
+  // 手動主動強制從雲端拉取最新資料 (Refresh & Cloud Sync - 僅依角色同步授權資料)
   const handleManualRefresh = async () => {
+    if (!currentUser) return;
     try {
       const {
         assignments: cloudAssignments,
         courses: cloudCourses,
         users: cloudUsers,
         progresses: cloudProgresses,
-      } = await manualSyncAllData();
+      } = await manualSyncAllData({
+        role: currentUser.role,
+        username: currentUser.username,
+      });
 
       if (cloudAssignments.length > 0) {
-        setAssignments(cloudAssignments);
-        saveStoredAssignments(cloudAssignments);
+        const visible = filterVisibleAssignments(cloudAssignments, currentUser);
+        setAssignments(visible);
+        saveStoredAssignments(visible);
       }
       if (cloudCourses.length > 0) {
         setCourses(cloudCourses);
         saveStoredSchedule(cloudCourses);
       }
-      if (cloudUsers && cloudUsers.length > 0) {
+      if (currentUser.role === 'admin' && cloudUsers && cloudUsers.length > 0) {
         syncUsersFromCloud(cloudUsers);
         setAllUsers(cloudUsers);
       }
       if (cloudProgresses && cloudProgresses.length > 0) {
-        setProgressList(cloudProgresses);
+        if (currentUser.role === 'admin') {
+          setProgressList(cloudProgresses);
+        } else {
+          const myUsername = currentUser.username.toLowerCase();
+          setProgressList(cloudProgresses.filter((p) => p.username.toLowerCase() === myUsername));
+        }
       }
 
-      if (currentUser) {
-        logAuditEvent({
-          category: 'backup',
-          action: '手動刷新同步',
-          level: 'info',
-          actor: currentUser,
-          details: '手動重新整理同步最新資料與進度。',
-        });
-      }
+      logAuditEvent({
+        category: 'backup',
+        action: '手動刷新同步',
+        level: 'info',
+        actor: currentUser,
+        details: '手動重新整理同步最新資料與進度。',
+      });
     } catch (err) {
       console.error('Failed to sync data manually:', err);
     }
@@ -807,6 +972,8 @@ export default function App() {
           onSearchChange={setSearchQuery}
           statusFilter={statusFilter}
           onStatusFilterChange={setStatusFilter}
+          scopeFilter={scopeFilter}
+          onScopeFilterChange={setScopeFilter}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           sortBy={sortBy}
@@ -836,7 +1003,7 @@ export default function App() {
                       : '目前篩選條件下沒有作業，您可以清除篩選條件或點擊下方按鈕新增作業。'}
                   </p>
                   <div className="flex items-center justify-center gap-3">
-                    {(selectedSubjectId || isUrgentFilterActive || searchQuery || statusFilter !== 'all') && (
+                    {(selectedSubjectId || isUrgentFilterActive || searchQuery || statusFilter !== 'all' || scopeFilter !== 'all') && (
                       <button
                         type="button"
                         onClick={() => {
@@ -844,6 +1011,7 @@ export default function App() {
                           setIsUrgentFilterActive(false);
                           setSearchQuery('');
                           setStatusFilter('all');
+                          setScopeFilter('all');
                         }}
                         className="btn-press px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
                       >
@@ -869,13 +1037,11 @@ export default function App() {
                       subject={subjectMap.get(assignment.subjectId)}
                       userProgress={currentUserProgressMap.get(assignment.id)}
                       currentUserRole={currentUser.role}
+                      currentUsername={currentUser.username}
                       completedCount={completedCountMap[assignment.id] || 0}
                       totalStudentsCount={studentUsers.length}
                       onOpenProgressModal={() => setSelectedAssignmentForProgress(assignment)}
-                      onEdit={(asg) => {
-                        setEditingAssignment(asg);
-                        setIsAssignmentModalOpen(true);
-                      }}
+                      onEdit={handleOpenEditAssignment}
                       onDelete={handleDeleteAssignment}
                       onStatusChange={handleStatusChange}
                       onToggleSubtask={handleToggleSubtask}
@@ -892,13 +1058,11 @@ export default function App() {
               subjects={subjects}
               userProgressMap={currentUserProgressMap}
               currentUserRole={currentUser.role}
+              currentUsername={currentUser.username}
               completedCountMap={completedCountMap}
               totalStudentsCount={studentUsers.length}
               onOpenProgressModal={(asg) => setSelectedAssignmentForProgress(asg)}
-              onEdit={(asg) => {
-                setEditingAssignment(asg);
-                setIsAssignmentModalOpen(true);
-              }}
+              onEdit={handleOpenEditAssignment}
               onDelete={handleDeleteAssignment}
               onStatusChange={handleStatusChange}
               onToggleSubtask={handleToggleSubtask}
@@ -910,10 +1074,7 @@ export default function App() {
             <CalendarView
               assignments={assignments}
               subjects={subjects}
-              onSelectAssignment={(asg) => {
-                setEditingAssignment(asg);
-                setIsAssignmentModalOpen(true);
-              }}
+              onSelectAssignment={handleOpenEditAssignment}
               onAddNewForDate={() => {
                 setEditingAssignment(null);
                 setIsAssignmentModalOpen(true);
@@ -925,6 +1086,7 @@ export default function App() {
             <WeeklyScheduleView
               courses={courses}
               onSaveCourses={(updated) => {
+                if (currentUser.role !== 'admin') return;
                 setCourses(updated);
                 saveScheduleToCloud(updated).catch(() => {});
               }}
@@ -940,14 +1102,12 @@ export default function App() {
                 setSelectedSubjectId(id);
                 setViewMode('list');
               }}
-              onEditAssignment={(asg) => {
-                setEditingAssignment(asg);
-                setIsAssignmentModalOpen(true);
-              }}
+              onEditAssignment={handleOpenEditAssignment}
               onAddNewForSubject={(id) => {
                 handleOpenAddModal(undefined, id);
               }}
               onLoadSampleAssignments={() => {
+                if (currentUser.role !== 'admin') return;
                 const samples = getSampleDemoAssignments();
                 setAssignments(samples);
               }}
@@ -962,6 +1122,7 @@ export default function App() {
         onClose={() => setIsScheduleModalOpen(false)}
         courses={courses}
         onSaveCourses={(updated) => {
+          if (currentUser.role !== 'admin') return;
           setCourses(updated);
           saveScheduleToCloud(updated).catch(() => {});
         }}
@@ -979,6 +1140,7 @@ export default function App() {
         onSave={handleSaveAssignment}
         subjects={subjects}
         courses={courses}
+        currentUser={currentUser}
         initialData={editingAssignment}
         prefillData={prefillAssignmentData}
       />
@@ -1005,11 +1167,13 @@ export default function App() {
         onClose={() => setIsBackupRestoreModalOpen(false)}
         assignments={assignments}
         onRestoreAssignments={(restored) => {
+          if (currentUser.role !== 'admin') return;
           setAssignments(restored);
           restored.forEach((asg) => saveAssignmentToCloud(asg).catch(() => {}));
         }}
         courses={courses}
         onRestoreCourses={(restored) => {
+          if (currentUser.role !== 'admin') return;
           setCourses(restored);
           saveScheduleToCloud(restored).catch(() => {});
         }}
@@ -1037,12 +1201,12 @@ export default function App() {
         />
       )}
 
-      {/* Class Progress Overview Matrix Modal (管理員全班繳交進度總表) */}
+      {/* Class Progress Overview Matrix Modal (管理員全班繳交進度總表：僅統計全班同步作業) */}
       {currentUser.role === 'admin' && (
         <ClassProgressOverviewModal
           isOpen={isClassOverviewOpen}
           onClose={() => setIsClassOverviewOpen(false)}
-          assignments={assignments}
+          assignments={classAssignments}
           students={allUsers}
           progressList={progressList}
           subjects={subjects}

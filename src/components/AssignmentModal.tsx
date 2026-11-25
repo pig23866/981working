@@ -12,9 +12,12 @@ import {
   Paperclip,
   CheckCircle2,
   BookOpen,
+  User,
+  Users,
 } from 'lucide-react';
 import {
   Assignment,
+  AssignmentScope,
   Subject,
   Priority,
   AssignmentStatus,
@@ -22,6 +25,7 @@ import {
   Subtask,
   AttachmentItem,
   CourseEntry,
+  SessionUser,
 } from '../types';
 import { SUBMISSION_LABELS, PRIORITY_LABELS } from '../lib/constants';
 import { formatDateForInput } from '../lib/dateUtils';
@@ -33,6 +37,7 @@ interface AssignmentModalProps {
   onSave: (assignment: Assignment) => void;
   subjects: Subject[];
   courses?: CourseEntry[];
+  currentUser: SessionUser;
   initialData?: Assignment | null;
   prefillData?: {
     title?: string;
@@ -48,9 +53,11 @@ export const AssignmentModal: React.FC<AssignmentModalProps> = ({
   onSave,
   subjects,
   courses = [],
+  currentUser,
   initialData,
   prefillData,
 }) => {
+  const [scope, setScope] = useState<AssignmentScope>(currentUser.role === 'admin' ? 'class' : 'personal');
   const [title, setTitle] = useState('');
   const [subjectId, setSubjectId] = useState(subjects[0]?.id || 'course-cs-prog');
   const [description, setDescription] = useState('');
@@ -72,6 +79,7 @@ export const AssignmentModal: React.FC<AssignmentModalProps> = ({
 
   useEffect(() => {
     if (initialData) {
+      setScope(initialData.scope === 'personal' ? 'personal' : 'class');
       setTitle(initialData.title);
       setSubjectId(initialData.subjectId);
       setDescription(initialData.description || '');
@@ -97,6 +105,7 @@ export const AssignmentModal: React.FC<AssignmentModalProps> = ({
       tomorrow.setDate(tomorrow.getDate() + 1);
       tomorrow.setHours(23, 59, 0, 0);
 
+      setScope(currentUser.role === 'admin' ? 'class' : 'personal');
       setTitle(prefillData?.title || '');
       setSubjectId(prefillData?.subjectId || subjects[0]?.id || 'course-cs-prog');
       setDescription(prefillData?.description || '');
@@ -111,7 +120,7 @@ export const AssignmentModal: React.FC<AssignmentModalProps> = ({
     }
     setAttachmentUrlError('');
     setShowAddAttachment(false);
-  }, [initialData, prefillData, isOpen, subjects]);
+  }, [initialData, prefillData, isOpen, subjects, currentUser.role]);
 
   if (!isOpen) return null;
 
@@ -177,6 +186,12 @@ export const AssignmentModal: React.FC<AssignmentModalProps> = ({
       driveAttachments: attachments,
       estimatedMinutes: initialData?.estimatedMinutes || 60,
       notes: notes.trim(),
+      scope,
+      ownerUsername:
+        scope === 'personal'
+          ? initialData?.ownerUsername || currentUser.username.toLowerCase()
+          : undefined,
+      createdBy: initialData?.createdBy || currentUser.displayName,
       createdAt: initialData?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -221,6 +236,54 @@ export const AssignmentModal: React.FC<AssignmentModalProps> = ({
 
         {/* Form Body - Simplified & High Efficiency */}
         <form onSubmit={handleSubmit} className="p-5 overflow-y-auto flex-1 space-y-4">
+          {/* 0. 作業範圍類型：個人作業 vs 全班作業 */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+              作業類型 <span className="text-rose-500">*</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                id="modal-scope-personal"
+                disabled={Boolean(initialData && initialData.scope !== 'personal' && currentUser.role !== 'admin')}
+                onClick={() => setScope('personal')}
+                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                  scope === 'personal'
+                    ? 'bg-teal-50 dark:bg-teal-950/60 border-teal-500 ring-2 ring-teal-500/20'
+                    : 'bg-slate-50 dark:bg-slate-800/70 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
+                  <User className={`w-3.5 h-3.5 ${scope === 'personal' ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400'}`} />
+                  <span>個人作業</span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                  僅自己可見，不同步給他人
+                </p>
+              </button>
+
+              <button
+                type="button"
+                id="modal-scope-class"
+                disabled={Boolean(initialData && initialData.scope === 'personal' && currentUser.role !== 'admin')}
+                onClick={() => setScope('class')}
+                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                  scope === 'class'
+                    ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-500 ring-2 ring-indigo-500/20'
+                    : 'bg-slate-50 dark:bg-slate-800/70 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
+                  <Users className={`w-3.5 h-3.5 ${scope === 'class' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+                  <span>全班作業</span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                  即時同步至全班所有人這端
+                </p>
+              </button>
+            </div>
+          </div>
+
           {/* 1. 課程名稱 (下拉選單對應課程名稱) */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
